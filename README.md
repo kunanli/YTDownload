@@ -25,13 +25,13 @@
 
 ```powershell
 # 下載一首歌（MP3）
-ytmusic dl "網址"
+python -m ytmusic dl "網址"
 
 # 下載整張播放清單
-ytmusic dl "網址" --playlist --playlist-folder
+python -m ytmusic dl "網址" --playlist --playlist-folder
 
 # 下載影片（MP4，可指定畫質）
-ytmusic dl "網址" --video 1080
+python -m ytmusic dl "網址" --video 1080
 ```
 
 還沒安裝 → 往下看 [第一部分：安裝](#第一部分安裝只需做一次)
@@ -114,7 +114,7 @@ pip install -e .
 **複製貼上，按 Enter：**
 
 ```powershell
-ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+python -m ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 看到 `✔ 完成 1 首` 就代表全部裝好了 🎉
@@ -141,7 +141,7 @@ cd YTDownload
 pip3 install -e .
 
 # 4. 測試
-ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+python -m ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
 ---
@@ -156,11 +156,16 @@ ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 >
 > （Mac 是 `cd ~/YTDownload`）
 
+> ### 📌 指令都是 `python -m ytmusic` 開頭
+>
+> 這個寫法在任何電腦上都能用。如果你看過 `ytmusic dl ...` 這種短寫法跑不動，
+> 是 PATH 的問題，見[「找不到 ytmusic 這個指令」](#找不到-ytmusic-這個指令)。
+
 > ### 📌 網址一定要用雙引號 `" "` 包起來
 >
 > ```powershell
-> ytmusic dl "https://..."     ✅ 對
-> ytmusic dl https://...       ❌ 錯，網址有 & 的話會壞掉
+> python -m ytmusic dl "https://..."     ✅ 對
+> python -m ytmusic dl https://...       ❌ 錯，網址有 & 的話會壞掉
 > ```
 
 ## 下載一首歌
@@ -168,7 +173,7 @@ ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 在瀏覽器複製網址，然後：
 
 ```powershell
-ytmusic dl "貼上網址"
+python -m ytmusic dl "貼上網址"
 ```
 
 就這樣。歌名、歌手、專輯封面都會自動填好。
@@ -176,13 +181,13 @@ ytmusic dl "貼上網址"
 ## 下載整張播放清單
 
 ```powershell
-ytmusic dl "播放清單網址" --playlist
+python -m ytmusic dl "播放清單網址" --playlist
 ```
 
 想放進獨立資料夾、而且照順序編號的話：
 
 ```powershell
-ytmusic dl "播放清單網址" --playlist --playlist-folder
+python -m ytmusic dl "播放清單網址" --playlist --playlist-folder
 ```
 
 > ### 💡 為什麼有時候會問我要單曲還是整張？
@@ -211,13 +216,13 @@ ytmusic dl "播放清單網址" --playlist --playlist-folder
 加上 `--video` 就會下載影片而不是只抓聲音：
 
 ```powershell
-ytmusic dl "影片網址" --video
+python -m ytmusic dl "影片網址" --video
 ```
 
 這樣會抓**最高畫質**，檔案可能很大。想省空間就指定畫質上限：
 
 ```powershell
-ytmusic dl "影片網址" --video 1080
+python -m ytmusic dl "影片網址" --video 1080
 ```
 
 可選畫質：
@@ -244,7 +249,7 @@ ytmusic dl "影片網址" --video 1080
 **播放清單也可以整批下載影片：**
 
 ```powershell
-ytmusic dl "播放清單網址" --playlist --video 720
+python -m ytmusic dl "播放清單網址" --playlist --video 720
 ```
 
 ## 檔案存到哪裡？
@@ -254,13 +259,13 @@ ytmusic dl "播放清單網址" --playlist --video 720
 想換地方，設定一次就好，以後都會記住：
 
 ```powershell
-ytmusic config set output_dir "D:\我的音樂"
+python -m ytmusic config set output_dir "D:\我的音樂"
 ```
 
 ## 想要更好的音質
 
 ```powershell
-ytmusic config set quality 320
+python -m ytmusic config set quality 320
 ```
 
 設一次就永久生效。（數字越大音質越好、檔案越大，320 是最高。）
@@ -271,11 +276,23 @@ ytmusic config set quality 320
 
 ## 「找不到 ytmusic 這個指令」
 
-改用這個寫法，功能完全一樣：
+如果你在別的地方看到 `ytmusic dl ...` 這種短寫法，跑出來是：
+
+```
+ytmusic : The term 'ytmusic' is not recognized as the name of a cmdlet...
+```
+
+那是因為 pip 安裝指令的資料夾沒有加進系統 PATH。**本說明書一律用
+`python -m ytmusic`，這個寫法一定能用**，功能完全一樣，不用理會短寫法。
+
+真的想用短寫法的話，跑這行把 pip 的資料夾加進 PATH（只需做一次）：
 
 ```powershell
-python -m ytmusic dl "網址"
+$s = python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"
+[Environment]::SetEnvironmentVariable("Path", "$([Environment]::GetEnvironmentVariable('Path','User'));$s", "User")
 ```
+
+跑完**關掉 PowerShell 再重開**，之後 `ytmusic dl "網址"` 就能用了。
 
 ## 「找不到 ffmpeg」
 
@@ -300,7 +317,7 @@ winget install Gyan.FFmpeg
 3. 加上 `--cookies-from-browser chrome`：
 
 ```powershell
-ytmusic dl "網址" --cookies-from-browser chrome
+python -m ytmusic dl "網址" --cookies-from-browser chrome
 ```
 
 Chrome 讀不到的話改用 Firefox（Windows 上 Chrome 常常讀不到，這是 Google 的保護機制）。
@@ -318,7 +335,7 @@ pip install -U yt-dlp
 加上 `-v` 會印出完整的錯誤訊息：
 
 ```powershell
-ytmusic dl "網址" -v
+python -m ytmusic dl "網址" -v
 ```
 
 ## 下載過的我還想再下載一次
@@ -332,14 +349,14 @@ ytmusic dl "網址" -v
 想連略過的那些一起重新下載，加 `--force`：
 
 ```powershell
-ytmusic dl "網址" --playlist --force
+python -m ytmusic dl "網址" --playlist --force
 ```
 
 只想重下其中一首的話，也可以把那筆紀錄刪掉：
 
 ```powershell
-ytmusic history list          # 找到那首的影片 ID
-ytmusic history remove <ID>
+python -m ytmusic history list          # 找到那首的影片 ID
+python -m ytmusic history remove <ID>
 ```
 
 ## 「我喜歡的音樂」或私人清單下載不了
@@ -348,7 +365,7 @@ ytmusic history remove <ID>
 沒有登入就會出現 `HTTP Error 404`。要加上登入資訊：
 
 ```powershell
-ytmusic dl "https://music.youtube.com/playlist?list=LM" --playlist --cookies-from-browser chrome
+python -m ytmusic dl "https://music.youtube.com/playlist?list=LM" --playlist --cookies-from-browser chrome
 ```
 
 記得**先把 Chrome 完全關掉**，詳見上面[「HTTP Error 403」或「需要登入」](#http-error-403或需要登入)。
@@ -392,10 +409,10 @@ pip install -e .
 ## 下載歷史
 
 ```powershell
-ytmusic history list          # 看下載過什麼（-n 0 顯示全部）
-ytmusic history remove <ID>   # 移除某筆，之後可以重新下載
-ytmusic history prune         # 清掉檔案已被刪除的紀錄
-ytmusic history clear         # 全部清空
+python -m ytmusic history list          # 看下載過什麼（-n 0 顯示全部）
+python -m ytmusic history remove <ID>   # 移除某筆，之後可以重新下載
+python -m ytmusic history prune         # 清掉檔案已被刪除的紀錄
+python -m ytmusic history clear         # 全部清空
 ```
 
 開頭有 `?` 表示紀錄還在、但檔案已經被移走或刪掉了。
@@ -403,11 +420,11 @@ ytmusic history clear         # 全部清空
 ## 預設設定
 
 ```powershell
-ytmusic config show                        # 看目前設定
-ytmusic config set output_dir "D:\Music"   # 改輸出位置
-ytmusic config set quality 320             # 改音質
-ytmusic config set playlist_folder true    # 清單一律建資料夾
-ytmusic config reset                       # 還原預設
+python -m ytmusic config show                        # 看目前設定
+python -m ytmusic config set output_dir "D:\Music"   # 改輸出位置
+python -m ytmusic config set quality 320             # 改音質
+python -m ytmusic config set playlist_folder true    # 清單一律建資料夾
+python -m ytmusic config reset                       # 還原預設
 ```
 
 命令列打的選項永遠優先於這裡的設定。
