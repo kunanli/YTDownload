@@ -70,6 +70,8 @@ class Config:
             problems.append("filename_template 必須包含 %(ext)s，否則副檔名會遺失")
         if self.cookies_file and not Path(self.cookies_file).expanduser().is_file():
             problems.append(f"找不到 cookies 檔案：{self.cookies_file}")
+        if self.cookies_from_browser:
+            problems.extend(_check_browser_spec(self.cookies_from_browser))
         return problems
 
     # -- 序列化 -----------------------------------------------------------
@@ -122,6 +124,27 @@ class Config:
                 continue
             data[key] = value
         return type(self).from_dict(data)
+
+
+def _check_browser_spec(spec: str) -> list[str]:
+    """在真的開始下載前先驗證 --cookies-from-browser 的寫法與瀏覽器名稱。"""
+    from .utils import parse_browser_spec
+
+    try:
+        name, _profile, _keyring, _container = parse_browser_spec(spec)
+    except ValueError as exc:
+        return [str(exc)]
+
+    try:  # yt-dlp 未安裝時就跳過名稱檢查，讓下載階段自己報錯。
+        from yt_dlp.cookies import SUPPORTED_BROWSERS
+    except ImportError:
+        return []
+    if name not in SUPPORTED_BROWSERS:
+        return [
+            f"不支援的瀏覽器 {name!r}，可用："
+            f"{', '.join(sorted(SUPPORTED_BROWSERS))}"
+        ]
+    return []
 
 
 def coerce_value(field_name: str, raw: str):

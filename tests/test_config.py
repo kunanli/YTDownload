@@ -25,6 +25,15 @@ def test_validate_rejects_bad_values():
     assert Config(filename_template="%(title)s").validate()
 
 
+def test_validate_accepts_known_browser():
+    assert Config(cookies_from_browser="chrome:Profile 1").validate() == []
+
+
+def test_validate_rejects_unknown_browser():
+    problems = Config(cookies_from_browser="netscape").validate()
+    assert problems and "netscape" in problems[0]
+
+
 def test_roundtrip_through_file(tmp_path):
     path = tmp_path / "config.json"
     Config(audio_format="flac", quality="best", concurrency=5).save(path)

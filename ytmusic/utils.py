@@ -124,6 +124,38 @@ def truncate(text: str, width: int) -> str:
     return text[: width - 1] + "…"
 
 
+# yt-dlp 的瀏覽器 cookies 規格：BROWSER[+KEYRING][:PROFILE][::CONTAINER]
+_BROWSER_SPEC_RE = re.compile(
+    r"""(?x)
+    (?P<name>[^+:]+)
+    (?:\s*\+\s*(?P<keyring>[^:]+))?
+    (?:\s*:\s*(?!:)(?P<profile>.+?))?
+    (?:\s*::\s*(?P<container>.+))?
+    """
+)
+
+
+def parse_browser_spec(value: str) -> tuple[str, str | None, str | None, str | None]:
+    """把 ``chrome:Profile 1`` 這類字串拆成 yt-dlp API 要的四元組。
+
+    yt-dlp 只在自己的命令列裡解析這個格式，透過 Python API 傳入時必須先拆好，
+    否則整串會被當成瀏覽器名稱。
+    """
+    match = _BROWSER_SPEC_RE.fullmatch(value.strip())
+    if not match:
+        raise ValueError(f"無法解析瀏覽器設定 {value!r}")
+    name = match.group("name").strip().lower()
+    if not name:
+        raise ValueError(f"無法解析瀏覽器設定 {value!r}")
+
+    def clean(group: str) -> str | None:
+        raw = match.group(group)
+        return raw.strip() or None if raw else None
+
+    keyring = clean("keyring")
+    return name, clean("profile"), keyring.upper() if keyring else None, clean("container")
+
+
 def find_ffmpeg() -> str | None:
     """回傳 ffmpeg 可執行檔路徑，找不到則回傳 None。"""
     return shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")

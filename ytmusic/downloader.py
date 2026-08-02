@@ -14,7 +14,7 @@ from .tagger import (
     TaggingError, TrackMeta, apply_tags, build_metadata, fetch_cover,
     pick_thumbnail_url,
 )
-from .utils import find_ffmpeg, sanitize_filename
+from .utils import find_ffmpeg, parse_browser_spec, sanitize_filename
 
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
 _BEST_VBR = "0"
@@ -273,7 +273,7 @@ class Downloader:
         if self.config.cookies_file:
             opts["cookiefile"] = str(Path(self.config.cookies_file).expanduser())
         if self.config.cookies_from_browser:
-            opts["cookiesfrombrowser"] = (self.config.cookies_from_browser,)
+            opts["cookiesfrombrowser"] = parse_browser_spec(self.config.cookies_from_browser)
         if self.config.rate_limit:
             limit = _parse_rate(self.config.rate_limit)
             if limit:

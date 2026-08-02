@@ -87,6 +87,43 @@ ytmusic dl "https://www.youtube.com/playlist?list=PL..." --dry-run
 | `--cookies FILE` | 指定 `cookies.txt` |
 | `--proxy URL` / `--rate-limit RATE` | 代理伺服器 / 限速（例如 `500K`） |
 
+### 登入（下載受限影片）
+
+年齡限制、會員限定、私人清單這類影片需要登入狀態。本工具**不會**要你輸入帳號密碼，
+而是借用你瀏覽器裡既有的 YouTube 登入 cookies。
+
+```bash
+# 先在瀏覽器登入 YouTube，然後：
+ytmusic dl <URL> --cookies-from-browser firefox
+
+# 有多個 Chrome 設定檔時指定是哪一個
+ytmusic dl <URL> --cookies-from-browser "chrome:Profile 1"
+
+# 存成預設值，以後不用每次打
+ytmusic config set cookies_from_browser firefox
+```
+
+可用的瀏覽器：`brave`、`chrome`、`chromium`、`edge`、`firefox`、`opera`、`safari`、
+`vivaldi`、`whale`。完整格式是 `瀏覽器[+keyring][:設定檔][::容器]`。
+
+幾個常見狀況：
+
+- **讀取 cookies 時瀏覽器要先關掉**（Chrome 系列會鎖住 cookies 資料庫）。
+- **Windows 上的 Chrome 124 以後**加了 App-Bound Encryption，`--cookies-from-browser chrome`
+  可能讀不到；改用 Firefox，或改走下面的 cookies.txt。
+- **Linux 上 Chrome 的 cookies 由系統 keyring 加密**，需要能存取 keyring；必要時用
+  `chrome+gnomekeyring` 之類的寫法指定。
+
+讀不到瀏覽器時，改用手動匯出的 cookies 檔：用瀏覽器擴充套件（搜尋 "Get cookies.txt"）
+以 Netscape 格式匯出 `youtube.com` 的 cookies，然後：
+
+```bash
+ytmusic dl <URL> --cookies ~/Downloads/cookies.txt
+```
+
+> 提醒：這等於把你的 YouTube 登入憑證交給程式使用，cookies.txt 請當成密碼保管，別上傳到
+> 任何地方。另外 Google 可能把大量自動下載視為異常活動，建議斟酌使用頻率。
+
 ### 下載歷史
 
 ```bash

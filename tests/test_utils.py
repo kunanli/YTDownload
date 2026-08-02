@@ -1,6 +1,8 @@
+import pytest
+
 from ytmusic.utils import (
-    clean_title, human_size, human_time, sanitize_filename, split_artist_title,
-    strip_topic, truncate,
+    clean_title, human_size, human_time, parse_browser_spec, sanitize_filename,
+    split_artist_title, strip_topic, truncate,
 )
 
 
@@ -79,6 +81,42 @@ class TestSanitizeFilename:
 
     def test_keeps_cjk(self):
         assert sanitize_filename("告白氣球") == "告白氣球"
+
+
+class TestParseBrowserSpec:
+    def test_plain_browser_name(self):
+        assert parse_browser_spec("chrome") == ("chrome", None, None, None)
+
+    def test_normalises_case_and_spacing(self):
+        assert parse_browser_spec("  Firefox  ") == ("firefox", None, None, None)
+
+    def test_profile(self):
+        assert parse_browser_spec("chrome:Profile 1") == ("chrome", "Profile 1", None, None)
+
+    def test_profile_path(self):
+        name, profile, _, _ = parse_browser_spec("firefox:~/.mozilla/firefox/abc.default")
+        assert (name, profile) == ("firefox", "~/.mozilla/firefox/abc.default")
+
+    def test_keyring(self):
+        assert parse_browser_spec("chromium+gnomekeyring") == (
+            "chromium", None, "GNOMEKEYRING", None
+        )
+
+    def test_container(self):
+        assert parse_browser_spec("firefox::Personal") == (
+            "firefox", None, None, "Personal"
+        )
+
+    def test_profile_and_container(self):
+        assert parse_browser_spec("firefox:dev-edition::Work") == (
+            "firefox", "dev-edition", None, "Work"
+        )
+
+    def test_rejects_empty(self):
+        with pytest.raises(ValueError):
+            parse_browser_spec("")
+        with pytest.raises(ValueError):
+            parse_browser_spec("  ")
 
 
 class TestFormatting:

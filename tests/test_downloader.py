@@ -146,7 +146,12 @@ class TestOptions:
         opts = Downloader(config)._base_opts()
         assert opts["proxy"] == "socks5://127.0.0.1:1080"
         assert opts["ratelimit"] == 500 * 1024
-        assert opts["cookiesfrombrowser"] == ("firefox",)
+        assert opts["cookiesfrombrowser"] == ("firefox", None, None, None)
+
+    def test_base_opts_parse_browser_profile(self, tmp_path):
+        config = Config(output_dir=tmp_path, cookies_from_browser="chrome:Profile 1")
+        opts = Downloader(config)._base_opts()
+        assert opts["cookiesfrombrowser"] == ("chrome", "Profile 1", None, None)
 
 
 class TestRenameFromMeta:
