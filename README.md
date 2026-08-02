@@ -1,167 +1,346 @@
-# ytmusic — YouTube 音樂下載器
+# YTDownload
 
-以 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 為核心的命令列工具：把 YouTube 影片或播放清單
-下載成音樂檔，自動轉檔、寫入 ID3 標籤與專輯封面，並記錄下載歷史避免重複下載。
+把 YouTube 和 YouTube Music 的東西下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
+**完全不懂電腦也沒關係**，照著下面做就行。安裝只要做一次，大概 10 分鐘。
+
+---
+
+## 這個工具能做什麼
+
+| 你想要 | 做得到嗎 |
+| --- | --- |
+| 下載一首歌變成 MP3 | ✅ |
+| 下載整張播放清單 | ✅ |
+| 下載影片（MP4） | ✅ |
+| 自動填好歌名、歌手、專輯封面 | ✅ |
+| 記住下載過什麼，不會重複下載 | ✅ |
+| YouTube Music 的網址 | ✅ |
+
+---
+
+# 第一部分：安裝（只需做一次）
+
+## Windows
+
+### 步驟 1：打開 PowerShell
+
+按鍵盤 `Win` 鍵，打 `powershell`，按 Enter。
+
+會跳出一個黑色（或藍色）的視窗，這就是等一下要打字的地方。
+
+### 步驟 2：檢查你有沒有需要的東西
+
+**複製下面這行，貼到 PowerShell 裡，按 Enter：**
+
+```powershell
+python --version; git --version; ffmpeg -version
 ```
-$ ytmusic dl "https://www.youtube.com/playlist?list=PL..." -f mp3 -q 320 -j 4
-正在解析網址…
-共 12 首；待下載 9 首，略過 3 首（已下載過）
-輸出：/home/you/Music/ytmusic　格式：mp3 @ 320　並行：4
-✔ [1/9] Rick Astley - Never Gonna Give You Up
-✔ [2/9] Rick Astley - Together Forever
-  周杰倫 - 告白氣球           [████████████░░░░░░]  67.2%     2.4 MiB/s  ETA 00:03
-  五月天 - 溫柔               [█████░░░░░░░░░░░░░]  28.9%     1.1 MiB/s  ETA 00:11
+
+> 💡 貼上的方法：在 PowerShell 視窗裡按滑鼠**右鍵**就會自動貼上。
+
+**看結果：**
+
+- 如果出現三組版本號 → 太好了，跳到 **步驟 4**
+- 如果有任何一個說「找不到」或跳出 Microsoft Store → 繼續步驟 3
+
+### 步驟 3：安裝缺少的東西
+
+**把下面三行一次全部複製貼上，按 Enter：**
+
+```powershell
+winget install Python.Python.3.12
+winget install Git.Git
+winget install Gyan.FFmpeg
 ```
 
-## 功能
+安裝過程會跑一陣子，等它跑完。
 
-- **音訊下載與轉檔** — mp3 / m4a / opus / flac / wav，音質可選 96–320 kbps 或 `best`
-- **播放清單批次下載** — 支援播放清單與頻道網址，可設定同時下載數
-- **ID3 標籤與封面** — 自動寫入歌名、演出者、專輯、年份與正方形專輯封面
-- **下載歷史** — 記住下載過的影片，重跑播放清單時自動略過
-- **檔名整理** — 從整理過的中繼資料重新命名，去掉 `(Official Music Video)` 這類雜訊
+> ### ⚠️ 這一步最多人卡住
+>
+> 裝完之後，**必須把 PowerShell 整個關掉，再重新打開一次**。
+>
+> 不重開的話，電腦不知道新程式裝在哪裡，下一步一定會失敗。
 
-## 安裝
+重開之後，**再跑一次步驟 2 的檢查指令**。三組版本號都出現才繼續。
 
-需要 Python 3.9 以上，以及 **ffmpeg**（轉檔用）。
+### 步驟 4：下載這個工具
 
-```bash
-git clone <此倉庫網址> && cd YTDownload
+**複製貼上，按 Enter：**
+
+```powershell
+cd ~
+git clone https://github.com/kunanli/YTDownload.git
+cd YTDownload
 pip install -e .
 ```
 
-或不安裝套件、直接跑原始碼：
+看到最後出現 `Successfully installed ytmusic` 就成功了。
 
-```bash
-pip install -r requirements.txt
-python -m ytmusic --help
+### 步驟 5：測試
+
+**複製貼上，按 Enter：**
+
+```powershell
+ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
-安裝 ffmpeg：
+看到 `✔ 完成 1 首` 就代表全部裝好了 🎉
 
-| 平台 | 指令 |
-| --- | --- |
-| macOS | `brew install ffmpeg` |
-| Ubuntu / Debian | `sudo apt install ffmpeg` |
-| Windows | `winget install Gyan.FFmpeg` |
+檔案會在 `C:\Users\你的名字\Music\ytmusic`。
 
-沒有 ffmpeg 也能用 `--no-convert` 直接保留 YouTube 原始音訊（通常是 m4a 或 webm）。
+---
 
-`Pillow` 是選用的：裝了封面會裁成正方形，沒裝則維持原本的 16:9。
+## macOS
 
-## 使用方式
-
-### 下載
+打開「終端機」（Terminal），貼上這幾行：
 
 ```bash
-# 單曲
-ytmusic dl "https://youtu.be/dQw4w9WgXcQ"
+# 1. 安裝 Homebrew（如果還沒有）
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-# 播放清單，320 kbps，同時下載 4 首，各自收進以清單命名的資料夾
-ytmusic dl "https://www.youtube.com/playlist?list=PL..." -q 320 -j 4 --playlist-folder
+# 2. 安裝需要的東西
+brew install python git ffmpeg
 
-# 多個網址一次下載，輸出成 flac
-ytmusic dl URL1 URL2 URL3 -f flac -o ~/Music/Lossless
+# 3. 下載這個工具
+cd ~
+git clone https://github.com/kunanli/YTDownload.git
+cd YTDownload
+pip3 install -e .
 
-# 先看看會下載哪些，不實際下載
-ytmusic dl "https://www.youtube.com/playlist?list=PL..." --dry-run
+# 4. 測試
+ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 ```
 
-主要選項：
+---
+
+# 第二部分：開始下載
+
+> ### 📌 每次要用之前，先切換到工具的資料夾
+>
+> ```powershell
+> cd ~\YTDownload
+> ```
+>
+> （Mac 是 `cd ~/YTDownload`）
+
+> ### 📌 網址一定要用雙引號 `" "` 包起來
+>
+> ```powershell
+> ytmusic dl "https://..."     ✅ 對
+> ytmusic dl https://...       ❌ 錯，網址有 & 的話會壞掉
+> ```
+
+## 下載一首歌
+
+在瀏覽器複製網址，然後：
+
+```powershell
+ytmusic dl "貼上網址"
+```
+
+就這樣。歌名、歌手、專輯封面都會自動填好。
+
+## 下載整張播放清單
+
+```powershell
+ytmusic dl "播放清單網址" --playlist
+```
+
+想放進獨立資料夾、而且照順序編號的話：
+
+```powershell
+ytmusic dl "播放清單網址" --playlist --playlist-folder
+```
+
+> ### 💡 為什麼有時候會問我要單曲還是整張？
+>
+> YouTube Music 的網址常常長這樣：
+>
+> ```
+> watch?v=abc123&list=RDAMVMabc123
+>        ↑ 這首歌      ↑ 一整串清單
+> ```
+>
+> 一個網址裡**兩個都有**，工具不知道你要哪個，所以會問你：
+>
+> ```
+> 要下載哪個？[1] 只要這一首（預設）　[2] 整張播放清單 >
+> ```
+>
+> 直接按 Enter 就是只下載那一首。想要整張就打 `2` 再按 Enter。
+>
+> 不想每次都被問的話，直接加 `--single` 或 `--playlist`。
+>
+> ⚠️ 清單代號是 `RD` 開頭的是 YouTube **自動混音**，長度幾乎無限，不建議整張下載。
+
+## 下載影片
+
+```powershell
+ytmusic dl "影片網址" --video
+```
+
+想省空間就限制畫質：
+
+```powershell
+ytmusic dl "影片網址" --video 720
+```
+
+可選畫質：`360`、`480`、`720`、`1080`、`1440`、`2160`
+
+影片存成 MP4，用的是相容性最好的編碼，Windows 內建播放器就能直接開。
+
+## 檔案存到哪裡？
+
+預設在 `C:\Users\你的名字\Music\ytmusic`（Mac 是 `~/Music/ytmusic`）。
+
+想換地方，設定一次就好，以後都會記住：
+
+```powershell
+ytmusic config set output_dir "D:\我的音樂"
+```
+
+## 想要更好的音質
+
+```powershell
+ytmusic config set quality 320
+```
+
+設一次就永久生效。（數字越大音質越好、檔案越大，320 是最高。）
+
+---
+
+# 第三部分：遇到問題怎麼辦
+
+## 「找不到 ytmusic 這個指令」
+
+改用這個寫法，功能完全一樣：
+
+```powershell
+python -m ytmusic dl "網址"
+```
+
+## 「找不到 ffmpeg」
+
+代表步驟 3 沒裝成功，或是**裝完沒有重開 PowerShell**。
+
+```powershell
+winget install Gyan.FFmpeg
+```
+
+裝完**關掉 PowerShell 再重開**。
+
+## 「Video unavailable」（影片無法使用）
+
+那支影片被刪除、設為私人，或你的地區看不到。換一支試試。
+
+## 「HTTP Error 403」或「需要登入」
+
+有些影片（會員限定、年齡限制）需要登入才能下載。
+
+1. 用 Chrome 登入 YouTube
+2. **把 Chrome 完全關掉**（很重要）
+3. 加上 `--cookies-from-browser chrome`：
+
+```powershell
+ytmusic dl "網址" --cookies-from-browser chrome
+```
+
+Chrome 讀不到的話改用 Firefox（Windows 上 Chrome 常常讀不到，這是 Google 的保護機制）。
+
+## 下載很慢或一直失敗
+
+YouTube 常常改東西，工具要跟著更新：
+
+```powershell
+pip install -U yt-dlp
+```
+
+## 我想看到底出了什麼事
+
+加上 `-v` 會印出完整的錯誤訊息：
+
+```powershell
+ytmusic dl "網址" -v
+```
+
+## 同一首歌想重新下載
+
+工具會記住下載過什麼，預設不會重複下載。想強制重下：
+
+```powershell
+ytmusic dl "網址" --force
+```
+
+## 怎麼更新這個工具
+
+```powershell
+cd ~\YTDownload
+git pull
+pip install -e .
+```
+
+---
+
+# 第四部分：完整選項（進階）
+
+## 下載選項
 
 | 選項 | 說明 |
 | --- | --- |
-| `-o, --output DIR` | 輸出資料夾 |
+| `-o, --output DIR` | 這次的輸出資料夾 |
 | `-f, --format` | `mp3`（預設）/ `m4a` / `opus` / `flac` / `wav` |
 | `-q, --quality` | `96`–`320` kbps 或 `best`（預設 `192`） |
-| `-j, --jobs N` | 同時下載數，預設 3，上限 16 |
-| `--playlist-folder` | 以播放清單名稱建立子資料夾，並在檔名前加曲序 |
+| `-j, --jobs N` | 同時下載幾首，預設 3，最多 16 |
+| `--video [RES]` | 下載影片，可指定畫質上限 |
+| `--single` | 網址同時含清單時，只要那一首 |
+| `--playlist` | 網址同時含清單時，下載整張 |
+| `--playlist-folder` | 用清單名稱建資料夾，檔名加上曲序 |
 | `--force` | 忽略下載歷史，重新下載 |
-| `--dry-run` | 只列出將要下載的曲目 |
-| `--no-convert` | 不轉檔（不需要 ffmpeg） |
-| `--no-tags` / `--no-cover` | 不寫標籤 / 不嵌入封面 |
-| `--no-rename` | 沿用 yt-dlp 檔名樣板，不依標籤改名 |
-| `--no-history` | 這次不讀也不寫下載歷史 |
-| `--cookies-from-browser` | 從瀏覽器讀 cookies，例如 `chrome`、`firefox`、`edge` |
-| `--cookies FILE` | 指定 `cookies.txt` |
-| `--proxy URL` / `--rate-limit RATE` | 代理伺服器 / 限速（例如 `500K`） |
+| `--dry-run` | 只列出會下載什麼，不真的下載 |
+| `--no-convert` | 不轉檔，保留原始音訊（不需要 ffmpeg） |
+| `--no-tags` / `--no-cover` | 不寫標籤 / 不放封面 |
+| `--no-rename` | 不依標籤改檔名 |
+| `--no-history` | 這次不記錄也不讀取歷史 |
+| `--cookies-from-browser` | 從瀏覽器讀登入資訊 |
+| `--cookies FILE` | 指定 cookies.txt |
+| `--proxy URL` | 代理伺服器 |
+| `--rate-limit RATE` | 限速，例如 `500K` |
+| `-v, --verbose` | 顯示完整診斷訊息 |
 
-### 登入（下載受限影片）
+## 下載歷史
 
-年齡限制、會員限定、私人清單這類影片需要登入狀態。本工具**不會**要你輸入帳號密碼，
-而是借用你瀏覽器裡既有的 YouTube 登入 cookies。
-
-```bash
-# 先在瀏覽器登入 YouTube，然後：
-ytmusic dl <URL> --cookies-from-browser firefox
-
-# 有多個 Chrome 設定檔時指定是哪一個
-ytmusic dl <URL> --cookies-from-browser "chrome:Profile 1"
-
-# 存成預設值，以後不用每次打
-ytmusic config set cookies_from_browser firefox
-```
-
-可用的瀏覽器：`brave`、`chrome`、`chromium`、`edge`、`firefox`、`opera`、`safari`、
-`vivaldi`、`whale`。完整格式是 `瀏覽器[+keyring][:設定檔][::容器]`。
-
-幾個常見狀況：
-
-- **讀取 cookies 時瀏覽器要先關掉**（Chrome 系列會鎖住 cookies 資料庫）。
-- **Windows 上的 Chrome 124 以後**加了 App-Bound Encryption，`--cookies-from-browser chrome`
-  可能讀不到；改用 Firefox，或改走下面的 cookies.txt。
-- **Linux 上 Chrome 的 cookies 由系統 keyring 加密**，需要能存取 keyring；必要時用
-  `chrome+gnomekeyring` 之類的寫法指定。
-
-讀不到瀏覽器時，改用手動匯出的 cookies 檔：用瀏覽器擴充套件（搜尋 "Get cookies.txt"）
-以 Netscape 格式匯出 `youtube.com` 的 cookies，然後：
-
-```bash
-ytmusic dl <URL> --cookies ~/Downloads/cookies.txt
-```
-
-> 提醒：這等於把你的 YouTube 登入憑證交給程式使用，cookies.txt 請當成密碼保管，別上傳到
-> 任何地方。另外 Google 可能把大量自動下載視為異常活動，建議斟酌使用頻率。
-
-### 下載歷史
-
-```bash
-ytmusic history list          # 列出最近 20 筆（-n 0 顯示全部）
-ytmusic history remove <ID>   # 移除某支影片的紀錄，之後可重新下載
+```powershell
+ytmusic history list          # 看下載過什麼（-n 0 顯示全部）
+ytmusic history remove <ID>   # 移除某筆，之後可以重新下載
 ytmusic history prune         # 清掉檔案已被刪除的紀錄
-ytmusic history clear         # 清空全部
+ytmusic history clear         # 全部清空
 ```
 
-`history list` 開頭的 `?` 表示紀錄還在、但檔案已不在原本的路徑。
+開頭有 `?` 表示紀錄還在、但檔案已經被移走或刪掉了。
 
-### 設定
+## 預設設定
 
-把常用選項存成預設值，之後就不用每次都打：
-
-```bash
-ytmusic config show
-ytmusic config set output_dir ~/Music/YT
-ytmusic config set quality 320
-ytmusic config set playlist_folder true
-ytmusic config reset
+```powershell
+ytmusic config show                        # 看目前設定
+ytmusic config set output_dir "D:\Music"   # 改輸出位置
+ytmusic config set quality 320             # 改音質
+ytmusic config set playlist_folder true    # 清單一律建資料夾
+ytmusic config reset                       # 還原預設
 ```
 
-命令列參數永遠優先於設定檔。
+命令列打的選項永遠優先於這裡的設定。
 
-設定檔與歷史資料庫放在 `~/.config/ytmusic/`（可用 `XDG_CONFIG_HOME` 或 `YTMUSIC_HOME`
-環境變數改位置）。
+設定檔放在 `~/.config/ytmusic/`。
 
 ## 標籤是怎麼判斷的
 
-1. YouTube Music 的曲目自帶 `track` / `artist` / `album` 欄位，優先採用。
-2. 一般影片則從標題解析：先移除 `(Official Music Video)`、`[Lyrics]`、`【官方MV】` 這類
-   宣傳字樣，再依 `演出者 - 歌名` 拆解；拆不出來就用頻道名稱當演出者。
-3. 下載播放清單時，清單名稱會當成專輯、清單順序會當成曲序。
-4. 封面取解析度最高的 JPEG 縮圖（刻意避開 webp，部分播放器不認）。
+1. YouTube Music 的曲目自帶歌名／歌手／專輯資料，優先採用
+2. 一般影片從標題解析：先拿掉 `(Official Music Video)`、`【官方MV】` 這類字樣，再依 `歌手 - 歌名` 拆開；拆不出來就用頻道名稱當歌手
+3. 下載清單時，清單名稱當專輯、順序當曲序
+4. 封面取解析度最高的 JPEG，有裝 Pillow 的話會裁成正方形
 
-檔名同樣用整理後的結果，所以會拿到 `Rick Astley - Never Gonna Give You Up.mp3`
-而不是 `Rick Astley - Rick Astley - Never Gonna Give You Up (Official Video) (4K...).mp3`。
+所以你會拿到 `Rick Astley - Never Gonna Give You Up.mp3`，而不是一長串亂七八糟的檔名。
 
 ## 離開狀態碼
 
@@ -174,31 +353,6 @@ ytmusic config reset
 | 4 | 部分成功、部分失敗 |
 | 130 | 使用者中斷 |
 
-## 疑難排解
-
-**`HTTP Error 403` 或「需要登入」** — 這類影片（年齡限制、會員限定、DRM 保護）要帶帳號
-cookies 才下載得動：
-
-```bash
-ytmusic dl <URL> --cookies-from-browser chrome
-```
-
-**看不懂失敗原因** — 加上 `-v` 會印出 yt-dlp 的完整診斷輸出：
-
-```bash
-ytmusic dl <URL> -v --dry-run
-```
-
-**下載一直失敗或速度異常** — yt-dlp 需要跟著 YouTube 的改動更新，先試 `pip install -U yt-dlp`。
-
-**`Video unavailable`** — 影片本身被移除、設為私人，或該地區看不到。換一支影片或改用
-`--cookies-from-browser` 試試。
-
-**YouTube Music 的網址** — `music.youtube.com/watch?v=...` 直接支援，網址後面的 `&si=...`
-分享參數不用刪。在 PowerShell 記得整串用雙引號括起來，否則 `&` 會被當成指令分隔符。
-
-**已經下載過但想重下** — 用 `--force`，或 `ytmusic history remove <影片ID>`。
-
 ## 開發
 
 ```bash
@@ -206,13 +360,19 @@ pip install -e ".[dev]"
 python -m pytest
 ```
 
-測試不需要網路，涵蓋標題解析、設定讀寫、歷史資料庫、播放清單攤平與檔名重新命名。
+156 個測試，不需要網路。涵蓋標題解析、網址判斷、設定讀寫、歷史資料庫、
+播放清單攤平、檔名重新命名與影片格式選擇。
 
-## 使用須知
+---
 
-本工具僅供下載你有權利取得的內容，例如自己的作品、公共領域素材，或授權允許離線
-使用的音樂。下載受版權保護的內容可能違反 YouTube 服務條款與當地法律，請自行確認
-你的使用方式合法。
+# 使用須知
+
+本工具僅供下載你有權利取得的內容 —— 例如你自己的作品、公共領域素材，或授權允許
+離線使用的音樂。下載受版權保護的內容可能違反 YouTube 服務條款與當地法律，請自行
+確認你的使用方式合法。
+
+用到 `--cookies` 相關功能時請注意：cookies 等同你的 YouTube 登入憑證，別把
+`cookies.txt` 傳給任何人或上傳到任何地方。
 
 ## 授權
 

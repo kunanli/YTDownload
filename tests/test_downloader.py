@@ -272,6 +272,38 @@ class TestVerbose:
         assert "logger" in opts
 
 
+class TestVideoMode:
+    def test_audio_selector_by_default(self, tmp_path):
+        assert Downloader(Config(output_dir=tmp_path))._format_selector() == "bestaudio/best"
+
+    def test_best_video_prefers_compatible_codecs(self, tmp_path):
+        selector = Downloader(Config(output_dir=tmp_path), video="best")._format_selector()
+        # H.264 + AAC 必須排在最前面，否則會拿到 Windows 放不動的 AV1／Opus
+        assert selector.startswith("bestvideo[vcodec^=avc1]+bestaudio[acodec^=mp4a]")
+        assert selector.endswith("/best")
+
+    def test_capped_video_selector_applies_height_to_every_branch(self, tmp_path):
+        selector = Downloader(Config(output_dir=tmp_path), video="1080")._format_selector()
+        assert "bestvideo[vcodec^=avc1][height<=?1080]+bestaudio[acodec^=mp4a]" in selector
+        assert "/bestvideo[height<=?1080]+bestaudio" in selector
+        assert "/best[height<=?1080]" in selector
+        assert selector.endswith("/best")
+
+    def test_video_mode_skips_audio_extraction(self, tmp_path):
+        downloader = Downloader(Config(output_dir=tmp_path), video="720")
+        assert downloader._postprocessors() == []
+
+    def test_video_mode_merges_to_mp4(self, tmp_path):
+        downloader = Downloader(Config(output_dir=tmp_path), video="720")
+        opts = downloader._download_opts(Track("a", "u", "t"), _CollectingLogger())
+        assert opts["merge_output_format"] == "mp4"
+
+    def test_audio_mode_does_not_set_merge_format(self, tmp_path):
+        downloader = Downloader(Config(output_dir=tmp_path))
+        opts = downloader._download_opts(Track("a", "u", "t"), _CollectingLogger())
+        assert "merge_output_format" not in opts
+
+
 class TestPreflight:
     def test_rejects_invalid_config(self, tmp_path):
         from ytmusic.downloader import DownloadAborted

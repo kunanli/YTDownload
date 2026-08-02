@@ -1,8 +1,8 @@
 import pytest
 
 from ytmusic.utils import (
-    clean_title, human_size, human_time, parse_browser_spec, sanitize_filename,
-    split_artist_title, strip_topic, truncate,
+    classify_url, clean_title, human_size, human_time, is_radio_playlist,
+    parse_browser_spec, sanitize_filename, split_artist_title, strip_topic, truncate,
 )
 
 
@@ -117,6 +117,51 @@ class TestParseBrowserSpec:
             parse_browser_spec("")
         with pytest.raises(ValueError):
             parse_browser_spec("  ")
+
+
+class TestClassifyUrl:
+    def test_plain_video(self):
+        assert classify_url("https://www.youtube.com/watch?v=abc") == "video"
+
+    def test_short_link(self):
+        assert classify_url("https://youtu.be/abc") == "video"
+
+    def test_music_youtube_video(self):
+        assert classify_url("https://music.youtube.com/watch?v=abc") == "video"
+
+    def test_plain_playlist(self):
+        assert classify_url("https://www.youtube.com/playlist?list=PL123") == "playlist"
+
+    def test_ambiguous_watch_with_list(self):
+        assert classify_url("https://www.youtube.com/watch?v=abc&list=PL123") == "both"
+
+    def test_ambiguous_music_radio(self):
+        url = "https://music.youtube.com/watch?v=abc&list=RDAMVMabc"
+        assert classify_url(url) == "both"
+
+    def test_ambiguous_short_link(self):
+        assert classify_url("https://youtu.be/abc?list=PL123") == "both"
+
+    def test_share_parameter_is_not_a_playlist(self):
+        assert classify_url("https://music.youtube.com/watch?v=abc&si=XYZ") == "video"
+
+    def test_non_youtube_is_unknown(self):
+        assert classify_url("https://example.com/watch?v=abc&list=PL1") == "unknown"
+
+    def test_channel_url_is_unknown(self):
+        assert classify_url("https://www.youtube.com/@someone") == "unknown"
+
+
+class TestIsRadioPlaylist:
+    def test_detects_radio_mix(self):
+        assert is_radio_playlist("https://music.youtube.com/watch?v=a&list=RDAMVMa")
+        assert is_radio_playlist("https://www.youtube.com/watch?v=a&list=RD123")
+
+    def test_normal_playlist_is_not_radio(self):
+        assert not is_radio_playlist("https://www.youtube.com/watch?v=a&list=PL123")
+
+    def test_no_list_is_not_radio(self):
+        assert not is_radio_playlist("https://youtu.be/abc")
 
 
 class TestFormatting:

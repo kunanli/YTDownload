@@ -12,7 +12,9 @@ from .config import AUDIO_FORMATS, QUALITIES, Config, coerce_value
 from .downloader import DownloadAborted, Downloader, Result, Track
 from .history import History, default_history_path
 from .progress import ProgressReporter
-from .utils import human_size
+from .utils import classify_url, human_size, is_radio_playlist
+
+VIDEO_QUALITIES = ("best", "2160", "1440", "1080", "720", "480", "360")
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -54,6 +56,13 @@ def _add_download_parser(sub) -> None:
         description="下載音訊並轉檔、寫標籤，已下載過的影片預設會自動略過。",
     )
     p.add_argument("urls", nargs="+", metavar="URL", help="影片、播放清單或頻道網址")
+    p.add_argument("--single", action="store_true",
+                   help="網址同時含播放清單時，只下載該首")
+    p.add_argument("--playlist", action="store_true",
+                   help="網址同時含播放清單時，下載整張清單")
+    p.add_argument("--video", nargs="?", const="best", choices=VIDEO_QUALITIES,
+                   metavar="RES",
+                   help="下載影片而非只要音訊；可指定畫質上限，例如 --video 1080")
     p.add_argument("-o", "--output", metavar="DIR", help="輸出資料夾")
     p.add_argument("-f", "--format", dest="audio_format", choices=AUDIO_FORMATS,
                    help="音訊格式（預設 mp3）")
@@ -126,7 +135,50 @@ def _add_config_parser(sub) -> None:
 # download
 # --------------------------------------------------------------------------
 
+def _resolve_single(args: argparse.Namespace) -> bool | None:
+    """決定 ``watch?v=…&list=…`` 這類網址要當單曲還是整張清單處理。
+
+    使用者明講就照做；沒講而且確實有歧義時，互動式詢問。無法互動（導向檔案、
+    排程執行）則預設只下載單曲——誤抓整張混音清單的代價遠大於漏抓。
+    回傳 None 表示使用者在提示中放棄。
+    """
+    if args.single and args.playlist:
+        print("--single 和 --playlist 不能同時使用。", file=sys.stderr)
+        return None
+
+    if args.single:
+        return True
+    if args.playlist:
+        return False
+
+    ambiguous = [url for url in args.urls if classify_url(url) == "both"]
+    if not ambiguous:
+        return False
+
+    if not sys.stdin.isatty():
+        print("網址同時含單曲與播放清單，預設只下載單曲（要整張請加 --playlist）。",
+              file=sys.stderr)
+        return True
+
+    print("\n這個網址同時包含單曲和播放清單：", file=sys.stderr)
+    for url in ambiguous[:3]:
+        note = "　← 自動混音清單，長度近乎無限" if is_radio_playlist(url) else ""
+        print(f"  {url}{note}", file=sys.stderr)
+    if len(ambiguous) > 3:
+        print(f"  …另外還有 {len(ambiguous) - 3} 個", file=sys.stderr)
+
+    try:
+        answer = input("要下載哪個？[1] 只要這一首（預設）　[2] 整張播放清單 > ").strip()
+    except EOFError:
+        return True
+    return answer != "2"
+
+
 def cmd_download(args: argparse.Namespace) -> int:
+    single = _resolve_single(args)
+    if single is None:
+        return EXIT_USAGE
+
     config = Config.load().merged(
         output_dir=args.output,
         audio_format=args.audio_format,
@@ -157,7 +209,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         total=0, enabled=not (args.no_progress or args.verbose)
     )
     downloader = Downloader(config, history=history, reporter=reporter,
-                            verbose=args.verbose)
+                            verbose=args.verbose, video=args.video)
 
     try:
         downloader.preflight()
@@ -169,13 +221,13 @@ def cmd_download(args: argparse.Namespace) -> int:
 
     try:
         print("正在解析網址…", file=sys.stderr)
-        tracks = downloader.expand(args.urls)
+        tracks = downloader.expand(args.urls, single=single)
         if not tracks:
             print("沒有找到可下載的曲目。", file=sys.stderr)
             return EXIT_PRECONDITION
 
         pending, skipped = downloader.filter_new(tracks, force=args.force)
-        _print_plan(config, tracks, pending, skipped)
+        _print_plan(config, tracks, pending, skipped, video=args.video)
 
         if args.dry_run:
             for track in pending:
@@ -197,9 +249,13 @@ def cmd_download(args: argparse.Namespace) -> int:
     return _summarize(results, config)
 
 
-def _print_plan(config: Config, tracks, pending, skipped) -> None:
-    fmt = config.audio_format if config.convert else "原始音訊"
-    quality = "" if not config.convert else f" @ {config.quality}"
+def _print_plan(config: Config, tracks, pending, skipped, video: str | None = None) -> None:
+    if video:
+        fmt = "mp4 影片"
+        quality = " @ 最佳畫質" if video == "best" else f" @ 最高 {video}p"
+    else:
+        fmt = config.audio_format if config.convert else "原始音訊"
+        quality = "" if not config.convert else f" @ {config.quality}"
     print(
         f"共 {len(tracks)} 首；待下載 {len(pending)} 首"
         + (f"，略過 {len(skipped)} 首（已下載過）" if skipped else ""),

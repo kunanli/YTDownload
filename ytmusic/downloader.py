@@ -14,7 +14,7 @@ from .tagger import (
     TaggingError, TrackMeta, apply_tags, build_metadata, fetch_cover,
     pick_thumbnail_url,
 )
-from .utils import find_ffmpeg, parse_browser_spec, sanitize_filename
+from .utils import FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filename
 
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
 _BEST_VBR = "0"
@@ -73,11 +73,13 @@ class Downloader:
 
     def __init__(self, config: Config, history: History | None = None,
                  reporter: ProgressReporter | None = None,
-                 verbose: bool = False) -> None:
+                 verbose: bool = False, video: str | None = None) -> None:
         self.config = config
         self.history = history
         self.reporter = reporter
         self.verbose = verbose
+        # None 代表只要音訊；否則是影片最高解析度（"best" 或像 "1080" 的數字）。
+        self.video = video
         self._stop = threading.Event()
 
     # -- 前置檢查 ---------------------------------------------------------
@@ -86,8 +88,11 @@ class Downloader:
         problems = self.config.validate()
         if problems:
             raise DownloadAborted("；".join(problems))
-        if self.config.convert and not find_ffmpeg():
-            from .utils import FFMPEG_HINT
+        if self.video and not find_ffmpeg():
+            raise DownloadAborted(
+                "下載影片需要 ffmpeg 才能把畫面和聲音合併成 mp4。\n" + FFMPEG_HINT
+            )
+        if self.config.convert and not self.video and not find_ffmpeg():
             raise DownloadAborted(FFMPEG_HINT)
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -96,8 +101,12 @@ class Downloader:
 
     # -- 展開網址 ---------------------------------------------------------
 
-    def expand(self, urls: list[str]) -> list[Track]:
-        """把播放清單／頻道網址攤平成曲目清單，並依影片 ID 去重。"""
+    def expand(self, urls: list[str], single: bool = False) -> list[Track]:
+        """把播放清單／頻道網址攤平成曲目清單，並依影片 ID 去重。
+
+        ``single`` 為真時，``watch?v=…&list=…`` 這種同時指向單曲與清單的網址
+        只取那一首；純播放清單網址不受影響，仍會完整展開。
+        """
         from yt_dlp import YoutubeDL
 
         # extract_flat="in_playlist" 只攤平清單內的影片，頻道底下的分頁清單仍會
@@ -107,6 +116,7 @@ class Downloader:
         opts.update({
             "extract_flat": "in_playlist",
             "skip_download": True,
+            "noplaylist": single,
         })
         if not self.verbose:
             # 攔下 yt-dlp 的錯誤輸出，改由我們統一格式化，避免同一則訊息印兩次。
@@ -288,7 +298,7 @@ class Downloader:
     def _download_opts(self, track: Track, logger: _CollectingLogger) -> dict:
         opts = self._base_opts()
         opts.update({
-            "format": "bestaudio/best",
+            "format": self._format_selector(),
             "noplaylist": True,
             "outtmpl": {"default": self._outtmpl(track)},
             "postprocessors": self._postprocessors(),
@@ -298,11 +308,30 @@ class Downloader:
             "windowsfilenames": True,
             "trim_file_name": 150,
         })
+        if self.video:
+            # 高畫質的影音是分開的串流，合併時統一輸出成相容性最好的 mp4。
+            opts["merge_output_format"] = "mp4"
         if not self.verbose:  # -v 時讓 yt-dlp 直接印出完整診斷訊息
             opts["logger"] = logger
         return opts
 
+    def _format_selector(self) -> str:
+        """依模式挑選 yt-dlp 的 format 字串。"""
+        if not self.video:
+            return "bestaudio/best"
+        cap = "" if self.video == "best" else f"[height<=?{self.video}]"
+        # 優先挑 H.264 + AAC。YouTube 現在多半優先給 AV1／Opus，檔案是比較小，
+        # 但 Windows 內建播放器、舊手機和多數剪輯軟體都放不動；挑不到才退回任意編碼。
+        return (
+            f"bestvideo[vcodec^=avc1]{cap}+bestaudio[acodec^=mp4a]"
+            f"/bestvideo{cap}+bestaudio"
+            f"/best{cap}"
+            "/best"
+        )
+
     def _postprocessors(self) -> list[dict]:
+        if self.video:
+            return []  # 影片模式不抽音訊
         if not self.config.convert:
             return []
         quality = _BEST_VBR if self.config.quality == "best" else self.config.quality

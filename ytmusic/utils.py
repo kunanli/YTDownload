@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import shutil
 import unicodedata
+import urllib.parse
 
 # 影片標題常見的宣傳雜訊，移除後才拿來當歌名。
 _NOISE_PATTERNS = [
@@ -154,6 +155,53 @@ def parse_browser_spec(value: str) -> tuple[str, str | None, str | None, str | N
 
     keyring = clean("keyring")
     return name, clean("profile"), keyring.upper() if keyring else None, clean("container")
+
+
+_YOUTUBE_HOSTS = {
+    "youtube.com", "www.youtube.com", "m.youtube.com",
+    "music.youtube.com", "youtu.be", "www.youtu.be",
+}
+
+
+def classify_url(url: str) -> str:
+    """判斷網址指向單曲、播放清單，還是兩者皆有。
+
+    回傳 ``video`` / ``playlist`` / ``both`` / ``unknown``。``both`` 就是
+    ``watch?v=…&list=…`` 這種有歧義的網址——使用者可能只想要那一首，也可能
+    想要整張清單，光看網址無從得知。
+    """
+    try:
+        parsed = urllib.parse.urlparse(url.strip())
+    except ValueError:
+        return "unknown"
+
+    host = parsed.netloc.lower()
+    if host not in _YOUTUBE_HOSTS:
+        return "unknown"  # 非 YouTube 網址交給 yt-dlp 自行判斷
+
+    params = urllib.parse.parse_qs(parsed.query)
+    has_list = bool(params.get("list"))
+    if host.endswith("youtu.be"):
+        has_video = bool(parsed.path.strip("/"))
+    else:
+        has_video = bool(params.get("v"))
+
+    if has_video and has_list:
+        return "both"
+    if has_list:
+        return "playlist"
+    if has_video:
+        return "video"
+    return "unknown"
+
+
+def is_radio_playlist(url: str) -> bool:
+    """判斷是否為 YouTube 自動產生的混音清單（RD / RDAMVM 開頭，長度近乎無限）。"""
+    try:
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+    except ValueError:
+        return False
+    return any(value.startswith("RD") for value in params.get("list", []))
 
 
 def find_ffmpeg() -> str | None:
