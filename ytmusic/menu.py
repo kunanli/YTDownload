@@ -29,10 +29,11 @@ class MenuItem:
 MENU_ITEMS = (
     MenuItem("1", "下載音樂（貼網址）"),
     MenuItem("2", "用歌名搜尋"),
-    MenuItem("3", "下載影片（貼網址）"),
-    MenuItem("4", "同步追蹤的播放清單"),
-    MenuItem("5", "看下載過什麼"),
-    MenuItem("6", "追蹤一張新的播放清單"),
+    MenuItem("3", "用歌手名稱找歌"),
+    MenuItem("4", "下載影片（貼網址）"),
+    MenuItem("5", "同步追蹤的播放清單"),
+    MenuItem("6", "看下載過什麼"),
+    MenuItem("7", "追蹤一張新的播放清單"),
 )
 
 
@@ -60,27 +61,36 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
 
     if choice == "1":
         url = ask("  貼上網址後按 Enter：").strip()
-        return ["dl", url] if url else None
+        if not url:
+            return None
+        want = ask("  要一起抓歌詞嗎？[y/Enter=不用] ").strip().lower()
+        return ["dl", url, "--lyrics"] if want in {"y", "yes", "要"} else ["dl", url]
 
     if choice == "2":
         keyword = ask("  要找什麼歌？ ").strip()
         return ["search", keyword] if keyword else None
 
     if choice == "3":
+        artist = ask("  歌手名稱？ ").strip()
+        return ["search", "--artist", artist] if artist else None
+
+    if choice == "4":
         url = ask("  貼上網址後按 Enter：").strip()
         if not url:
             return None
         answer = ask("\n   畫質：[1] 720p　[2] 1080p　[3] 最高\n  請選擇（直接按 Enter = 720p）：")
         quality = VIDEO_CHOICES.get(answer.strip() or "1", "720")
-        return ["dl", url, "--video", quality]
-
-    if choice == "4":
-        return ["sync"]
+        want = ask("  要一起嵌入字幕嗎？[y/Enter=不用] ").strip().lower()
+        command = ["dl", url, "--video", quality]
+        return command + ["--subs"] if want in {"y", "yes", "要"} else command
 
     if choice == "5":
-        return ["history", "list"]
+        return ["sync"]
 
     if choice == "6":
+        return ["history", "list"]
+
+    if choice == "7":
         url = ask("  貼上播放清單網址：").strip()
         if not url:
             return None

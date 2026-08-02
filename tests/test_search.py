@@ -1,7 +1,8 @@
 import pytest
 
 from ytmusic.search import (
-    SearchResult, SelectionError, format_results, parse_results, parse_selection,
+    SearchResult, SelectionError, filter_by_artist, format_results, parse_results,
+    parse_selection,
 )
 from ytmusic.utils import display_width
 
@@ -114,3 +115,81 @@ class TestParseSelection:
     def test_not_a_number(self):
         with pytest.raises(SelectionError):
             parse_selection("abc", 5)
+
+
+class TestFilterByArtist:
+    def _r(self, title, channel, duration=200.0):
+        return SearchResult(video_id=title, title=title, uploader=channel,
+                            duration=duration, url="u")
+
+    def test_keeps_only_the_artists_own_channel(self):
+        results = [
+            self._r("晴天", "周杰倫 Jay Chou"),
+            self._r("晴天 歌詞版", "某某歌詞頻道"),
+            self._r("晴天 cover", "路人翻唱"),
+        ]
+        assert [r.uploader for r in filter_by_artist(results, "周杰倫")] == ["周杰倫 Jay Chou"]
+
+    def test_matches_regardless_of_case_and_spacing(self):
+        results = [self._r("Song", "Rick  Astley")]
+        assert filter_by_artist(results, "rickastley")
+        assert filter_by_artist(results, "RICK ASTLEY")
+
+    def test_matches_topic_channels(self):
+        results = [self._r("Song", "周杰倫 - Topic")]
+        assert len(filter_by_artist(results, "周杰倫")) == 1
+
+    def test_drops_long_compilations(self):
+        results = [
+            self._r("晴天", "周杰倫 Jay Chou", 200),
+            self._r("周杰倫全部歌曲合輯", "周杰倫 Jay Chou", 8000),
+        ]
+        assert [r.title for r in filter_by_artist(results, "周杰倫")] == ["晴天"]
+
+    def test_keeps_long_ones_if_that_is_all_there_is(self):
+        results = [self._r("演唱會全場", "周杰倫 Jay Chou", 8000)]
+        assert len(filter_by_artist(results, "周杰倫")) == 1
+
+    def test_returns_empty_when_no_channel_matches(self):
+        results = [self._r("Song", "完全無關的頻道")]
+        assert filter_by_artist(results, "周杰倫") == []
+
+    def test_blank_artist(self):
+        assert filter_by_artist([self._r("Song", "Chan")], "  ") == []
+
+
+class TestNonVideoResultsAreDropped:
+    def test_channel_entry_is_dropped(self):
+        # 使用者截圖裡的狀況：搜尋結果第一筆是頻道，長度顯示 --:--，
+        # 選下去會把整個頻道抓下來
+        info = {"entries": [
+            {"id": "UCabcdefghijklmnopqrstuv", "title": "周杰倫 Jay Chou",
+             "ie_key": "YoutubeTab", "duration": None},
+            {"id": "abc12345678", "title": "晴天", "duration": 269},
+        ]}
+        assert [r.video_id for r in parse_results(info)] == ["abc12345678"]
+
+    def test_playlist_entry_is_dropped(self):
+        info = {"entries": [{"id": "PL123456789012345", "title": "合輯",
+                             "ie_key": "YoutubePlaylist", "duration": None}]}
+        assert parse_results(info) == []
+
+    def test_video_without_duration_is_kept(self):
+        # 直播等影片可能沒有長度，但 ID 是正常的 11 碼，不該被誤刪
+        info = {"entries": [{"id": "abc12345678", "title": "直播中",
+                             "ie_key": "Youtube", "duration": None}]}
+        assert len(parse_results(info)) == 1
+
+
+class TestLongMarker:
+    def test_long_video_is_marked(self):
+        long_one = SearchResult("a", "合輯", "Chan", 8000.0, "u")
+        assert "≡" in format_results([long_one])[0]
+
+    def test_short_video_is_not_marked(self):
+        short = SearchResult("a", "單曲", "Chan", 200.0, "u")
+        assert "≡" not in format_results([short])[0]
+
+    def test_official_audio_beats_long_marker(self):
+        both = SearchResult("a", "合輯", "Chan - Topic", 8000.0, "u")
+        assert "♪" in format_results([both])[0]

@@ -10,6 +10,8 @@ from dataclasses import dataclass
 
 from .utils import human_time, pad_display, strip_topic, truncate
 
+LONG_SECONDS = 15 * 60
+
 
 @dataclass
 class SearchResult:
@@ -25,12 +27,21 @@ class SearchResult:
         return self.uploader.strip().lower().endswith("- topic")
 
     @property
+    def is_long(self) -> bool:
+        """超過 15 分鐘的多半是合輯或演唱會全場，不是單曲。"""
+        return bool(self.duration and self.duration > LONG_SECONDS)
+
+    @property
     def channel(self) -> str:
         return strip_topic(self.uploader) or self.uploader
 
 
 def parse_results(info: dict | None) -> list[SearchResult]:
-    """把 yt-dlp 的搜尋結果轉成 SearchResult 清單。"""
+    """把 yt-dlp 的搜尋結果轉成 SearchResult 清單。
+
+    YouTube 的搜尋結果裡會混進頻道與播放清單，它們沒有長度、選下去會把整個
+    頻道抓下來，所以在這裡就濾掉，只留真正的影片。
+    """
     if not info:
         return []
     results: list[SearchResult] = []
@@ -38,7 +49,7 @@ def parse_results(info: dict | None) -> list[SearchResult]:
         if not entry:
             continue
         video_id = entry.get("id")
-        if not video_id:
+        if not video_id or not _is_video(entry):
             continue
         results.append(SearchResult(
             video_id=str(video_id),
@@ -53,6 +64,20 @@ def parse_results(info: dict | None) -> list[SearchResult]:
 
 CHANNEL_WIDTH = 20
 DURATION_WIDTH = 6
+
+# 非影片的搜尋結果（頻道、播放清單分頁）在 ie_key 裡都帶這些字。
+_NON_VIDEO_IE_KEYS = ("tab", "playlist", "channel", "user")
+
+
+def _is_video(entry: dict) -> bool:
+    ie_key = str(entry.get("ie_key") or entry.get("_type") or "").lower()
+    if any(token in ie_key for token in _NON_VIDEO_IE_KEYS):
+        return False
+    # 頻道 ID 是 UC 開頭的 24 碼；影片 ID 是 11 碼。沒有長度又是頻道 ID 的一律排除。
+    video_id = str(entry.get("id") or "")
+    if entry.get("duration") is None and (video_id.startswith("UC") or len(video_id) > 11):
+        return False
+    return True
 
 
 def format_results(results: list[SearchResult], width: int = 100) -> list[str]:
@@ -69,7 +94,12 @@ def format_results(results: list[SearchResult], width: int = 100) -> list[str]:
 
     lines = []
     for index, result in enumerate(results, start=1):
-        mark = "♪" if result.is_official_audio else " "
+        if result.is_official_audio:
+            mark = "♪"
+        elif result.is_long:
+            mark = "≡"
+        else:
+            mark = " "
         length = human_time(result.duration) if result.duration else "--:--"
         title = pad_display(truncate(result.title, title_width), title_width)
         lines.append(
@@ -77,6 +107,35 @@ def format_results(results: list[SearchResult], width: int = 100) -> list[str]:
             f"{length:>{DURATION_WIDTH}}  {truncate(result.channel, CHANNEL_WIDTH)}"
         )
     return lines
+
+
+def _normalise(text: str) -> str:
+    """比對頻道名用：去掉空白、破折號與大小寫差異。"""
+    return "".join(text.lower().split()).replace("-", "").replace("–", "")
+
+
+def filter_by_artist(results: list[SearchResult], artist: str) -> list[SearchResult]:
+    """只留下該歌手頻道上傳的單曲。
+
+    直接搜歌手名字會混進別人做的歌詞版、翻唱與數小時的合輯；比對頻道名稱就能
+    篩出官方上傳的內容。若篩完什麼都不剩（冷門歌手、頻道名與搜尋字不同），
+    回傳空清單讓呼叫端自行決定退路。
+    """
+    wanted = _normalise(artist)
+    if not wanted:
+        return []
+
+    matched = []
+    for result in results:
+        channel = _normalise(result.channel)
+        if not channel:
+            continue
+        if wanted in channel or channel in wanted:
+            matched.append(result)
+
+    # 合輯與演唱會全場不是「一首歌」，但如果全部都是就別把清單清空。
+    singles = [r for r in matched if not r.is_long]
+    return singles or matched
 
 
 class SelectionError(ValueError):

@@ -13,11 +13,15 @@ from .config import AUDIO_FORMATS, QUALITIES, Config, coerce_value
 from .downloader import DownloadAborted, Downloader, Result, Track
 from .history import History, default_history_path
 from .progress import ProgressReporter
-from .search import SelectionError, format_results, parse_selection
+from .search import (
+    SelectionError, filter_by_artist, format_results, parse_selection,
+)
 from .subscriptions import SubscriptionError, Subscriptions
 from .utils import classify_url, human_size, is_radio_playlist
 
 VIDEO_QUALITIES = ("best", "2160", "1440", "1080", "720", "480", "360")
+# 預設抓中文，抓不到就退英文；zh-Hant/zh-Hans 涵蓋繁簡自動字幕。
+SUBS_USE_CONFIG = ""  # --subs 不帶值時改用設定檔的語言
 
 EXIT_OK = 0
 EXIT_FAILED = 1
@@ -91,6 +95,10 @@ def _add_download_options(p) -> None:
     p.add_argument("--video", nargs="?", const="best", choices=VIDEO_QUALITIES,
                    metavar="RES",
                    help="下載影片而非只要音訊；可指定畫質上限，例如 --video 1080")
+    p.add_argument("--subs", nargs="?", const=SUBS_USE_CONFIG, metavar="LANG",
+                   help="下載影片時一併嵌入字幕；可指定語言，例如 --subs 繁中,英")
+    p.add_argument("--lyrics", nargs="?", const=SUBS_USE_CONFIG, metavar="LANG",
+                   help="下載音樂時附上歌詞（存成 .lrc 並寫進標籤）")
     p.add_argument("-o", "--output", metavar="DIR", help="輸出資料夾")
     p.add_argument("-f", "--format", dest="audio_format", choices=AUDIO_FORMATS,
                    help="音訊格式（預設 mp3）")
@@ -127,6 +135,8 @@ def _add_search_parser(sub) -> None:
                    help="顯示幾筆結果（預設 8，上限 50）")
     p.add_argument("--first", action="store_true",
                    help="不詢問，直接下載第一筆（適合寫在腳本裡）")
+    p.add_argument("-a", "--artist", action="store_true",
+                   help="把關鍵字當成歌手名：只列出該歌手頻道的單曲，排除翻唱與合輯")
     _add_download_options(p)
     p.set_defaults(func=cmd_search, single=True, playlist=False)
 
@@ -279,6 +289,13 @@ def _build_config(args: argparse.Namespace) -> Config:
     )
 
 
+def _langs(flag: str | None, config: Config) -> str | None:
+    """--subs/--lyrics 沒帶語言時，改用設定檔裡的語言清單。"""
+    if flag is None:
+        return None
+    return flag or config.subtitle_langs
+
+
 def _download_urls(urls: list[str], args: argparse.Namespace, *,
                    single: bool, label: str | None = None,
                    stats: dict | None = None) -> int:
@@ -300,7 +317,9 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
         total=0, enabled=not (args.no_progress or args.verbose)
     )
     downloader = Downloader(config, history=history, reporter=reporter,
-                            verbose=args.verbose, video=args.video)
+                            verbose=args.verbose, video=args.video,
+                            subs=_langs(args.subs, config),
+                            lyrics=_langs(args.lyrics, config))
 
     try:
         downloader.preflight()
@@ -410,13 +429,24 @@ def cmd_search(args: argparse.Namespace) -> int:
         return EXIT_PRECONDITION
 
     config = _build_config(args)
-    downloader = Downloader(config, verbose=args.verbose)
-    print(f"搜尋「{query}」…", file=sys.stderr)
+    downloader = Downloader(config, verbose=args.verbose)  # 搜尋不需要下載設定
+    mode = "歌手" if args.artist else "搜尋"
+    print(f"{mode}「{query}」…", file=sys.stderr)
     try:
-        results = downloader.search(query, limit=args.limit)
+        # 歌手模式要多撈一些，因為接下來會濾掉非本人頻道的結果。
+        results = downloader.search(
+            query, limit=args.limit * 3 if args.artist else args.limit)
     except DownloadAborted as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_PRECONDITION
+
+    if args.artist:
+        narrowed = filter_by_artist(results, query)
+        if narrowed:
+            results = narrowed[:args.limit]
+        else:
+            print(f"找不到「{query}」名下的頻道，改用一般搜尋結果。", file=sys.stderr)
+            results = results[:args.limit]
 
     if not results:
         print("找不到結果，換個關鍵字試試。", file=sys.stderr)
@@ -426,7 +456,7 @@ def cmd_search(args: argparse.Namespace) -> int:
     print()
     for line in format_results(results, width=width):
         print(line)
-    print("\n  ♪ = 官方音源（音質通常最好）")
+    print("\n  ♪ = 官方音源（音質通常最好）　≡ = 超過 15 分鐘，多半是合輯")
 
     picked = _prompt_selection(results, first_only=args.first)
     if picked is None:

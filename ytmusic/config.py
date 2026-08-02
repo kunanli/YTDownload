@@ -43,6 +43,7 @@ class Config:
     use_history: bool = True
     playlist_folder: bool = False
     rename_from_tags: bool = True
+    subtitle_langs: str = "zh-TW,zh-Hans,en,ja,ko,es"
     filename_template: str = DEFAULT_TEMPLATE
     cookies_file: str | None = None
     cookies_from_browser: str | None = None

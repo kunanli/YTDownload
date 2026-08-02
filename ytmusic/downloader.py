@@ -74,13 +74,16 @@ class Downloader:
 
     def __init__(self, config: Config, history: History | None = None,
                  reporter: ProgressReporter | None = None,
-                 verbose: bool = False, video: str | None = None) -> None:
+                 verbose: bool = False, video: str | None = None,
+                 subs: str | None = None, lyrics: str | None = None) -> None:
         self.config = config
         self.history = history
         self.reporter = reporter
         self.verbose = verbose
         # None 代表只要音訊；否則是影片最高解析度（"best" 或像 "1080" 的數字）。
         self.video = video
+        self.subs = subs
+        self.lyrics = lyrics
         self._stop = threading.Event()
 
     # -- 前置檢查 ---------------------------------------------------------
@@ -203,9 +206,17 @@ class Downloader:
 
         if self.reporter:
             self.reporter.start(track.video_id, track.label)
+        subtitle_warning: str | None = None
         try:
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(track.url, download=True)
+            try:
+                info = _fetch(opts, track.url)
+            except Exception as exc:
+                # 字幕是加分項，不該讓整首歌下載失敗（缺該語言、被限流都可能）。
+                if not (self.subs or self.lyrics) or not _is_subtitle_error(exc):
+                    raise
+                subtitle_warning = f"字幕抓不到（{_short_error(exc, logger)}），只下載了音訊"
+                info = _fetch(self._without_subtitles(opts), track.url)
+
             if info is None:
                 raise DownloadError("yt-dlp 沒有回傳任何資訊")
             path = _final_path(info)
@@ -222,7 +233,7 @@ class Downloader:
                 self.reporter.finish(track.video_id, "error", f"{track.label} — {message}")
             return Result(track, "error", message=message)
 
-        warnings: list[str] = []
+        warnings: list[str] = [subtitle_warning] if subtitle_warning else []
         meta = build_metadata(
             info,
             playlist_title=track.playlist_title,
@@ -239,6 +250,7 @@ class Downloader:
             except TaggingError as exc:
                 warnings.append(str(exc))
 
+        downloaded_path = path  # 字幕檔是照這個名字存的，改名後要用它來找
         if self.config.rename_from_tags:
             # yt-dlp 的樣板只看得到原始欄位，檔名會留著 "(Official Video)" 這類雜訊，
             # 也常把演出者重複兩次；這裡改用整理過的中繼資料重新命名。
@@ -247,6 +259,11 @@ class Downloader:
                 number=self.config.playlist_folder,
                 replaceable=self._previous_path(track.video_id),
             ) or path
+
+        if self.lyrics and not self.video and not subtitle_warning:
+            note = self._write_lyrics(path, meta, source=downloaded_path)
+            if note:
+                warnings.append(note)
 
         self._record(track, meta, path, info)
 
@@ -262,6 +279,45 @@ class Downloader:
         if not url:
             return None
         return fetch_cover(url, square=self.config.square_cover)
+
+    def _write_lyrics(self, path: Path, meta: TrackMeta,
+                      source: Path | None = None) -> str | None:
+        """把 yt-dlp 抓下來的字幕轉成 .lrc 並寫進標籤，回傳警告訊息或 None。
+
+        ``source`` 是改名前的檔案路徑：字幕檔是照 yt-dlp 的原始檔名存的，
+        改名後就對不上了，所以要用原本的名字去找。
+        """
+        from .lyrics import (
+            embed_lyrics, find_subtitle_files, read_subtitle, to_lrc, to_plain,
+        )
+
+        from .lyrics import normalise_languages
+
+        subtitle_files = find_subtitle_files(
+            source or path, normalise_languages(self.lyrics or ""))
+        if not subtitle_files:
+            return "沒有字幕可轉成歌詞"
+
+        cues = read_subtitle(subtitle_files[0])
+        if not cues:
+            return "字幕是空的"
+
+        lrc_path = path.with_suffix(".lrc")
+        try:
+            lrc_path.write_text(
+                to_lrc(cues, title=meta.title, artist=meta.artist, album=meta.album),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            return f"寫入 .lrc 失敗：{exc}"
+
+        embed_lyrics(path, to_plain(cues))
+        for item in subtitle_files:  # 字幕檔已轉成 .lrc，不用留著
+            try:
+                item.unlink()
+            except OSError:
+                pass
+        return None
 
     def _previous_path(self, video_id: str) -> Path | None:
         """同一支影片上次下載到的位置（重下時用來覆寫自己而非產生副本）。"""
@@ -327,6 +383,7 @@ class Downloader:
             "windowsfilenames": True,
             "trim_file_name": 150,
         })
+        opts.update(self._subtitle_opts())
         if self.video:
             # 高畫質的影音是分開的串流，合併時統一輸出成相容性最好的 mp4。
             opts["merge_output_format"] = "mp4"
@@ -348,17 +405,59 @@ class Downloader:
             "/best"
         )
 
+    @staticmethod
+    def _without_subtitles(opts: dict) -> dict:
+        """複製一份拿掉所有字幕相關設定的選項，用於重試。"""
+        retry = dict(opts)
+        for key in ("writesubtitles", "writeautomaticsub", "subtitleslangs",
+                    "subtitlesformat"):
+            retry.pop(key, None)
+        retry["postprocessors"] = [
+            pp for pp in retry.get("postprocessors") or []
+            if "Subtitle" not in pp.get("key", "")
+        ]
+        return retry
+
+    def _subtitle_opts(self) -> dict:
+        """字幕下載設定。影片會把字幕燒進 mp4，音訊則留下字幕檔供轉成歌詞。"""
+        from .lyrics import normalise_languages
+
+        spec = self.subs or self.lyrics
+        if not spec:
+            return {}
+        langs = normalise_languages(spec)
+        if not langs:
+            return {}
+        opts: dict = {
+            "writesubtitles": True,
+            # 官方音源常常沒有人工字幕，自動字幕總比沒有好。
+            "writeautomaticsub": True,
+            "subtitleslangs": langs,
+            "subtitlesformat": "srt/vtt/best",
+        }
+        return opts
+
     def _postprocessors(self) -> list[dict]:
+        steps: list[dict] = []
+
         if self.video:
-            return []  # 影片模式不抽音訊
-        if not self.config.convert:
-            return []
-        quality = _BEST_VBR if self.config.quality == "best" else self.config.quality
-        return [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": self.config.audio_format,
-            "preferredquality": quality,
-        }]
+            if self.subs:
+                # 統一轉成 srt 再燒進 mp4，播放器可自行開關字幕。
+                steps.append({"key": "FFmpegSubtitlesConvertor", "format": "srt"})
+                steps.append({"key": "FFmpegEmbedSubtitle"})
+            return steps
+
+        if self.config.convert:
+            quality = _BEST_VBR if self.config.quality == "best" else self.config.quality
+            steps.append({
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": self.config.audio_format,
+                "preferredquality": quality,
+            })
+        if self.lyrics:
+            # 轉成 srt，稍後由 lyrics.py 解析成 LRC。
+            steps.append({"key": "FFmpegSubtitlesConvertor", "format": "srt"})
+        return steps
 
     def _outtmpl(self, track: Track) -> str:
         root = self.config.output_dir
@@ -507,6 +606,22 @@ def _parse_rate(value: str) -> int | None:
         return int(float(text) * multiplier)
     except ValueError:
         return None
+
+
+_SUBTITLE_ERROR_MARKERS = ("subtitle", "字幕")
+
+
+def _is_subtitle_error(exc: Exception) -> bool:
+    """判斷這個失敗是不是只跟字幕有關（音訊本身其實抓得到）。"""
+    message = str(exc).lower()
+    return any(marker in message for marker in _SUBTITLE_ERROR_MARKERS)
+
+
+def _fetch(opts: dict, url: str):
+    from yt_dlp import YoutubeDL
+
+    with YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=True)
 
 
 def _clean_error_text(raw: str) -> str:
