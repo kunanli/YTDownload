@@ -8,7 +8,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from .utils import human_size, human_time, truncate
+from .utils import display_width, human_size, human_time, pad_display, truncate
 
 _CLEAR_LINE = "\x1b[2K"
 _CURSOR_UP = "\x1b[1A"
@@ -124,22 +124,24 @@ class ProgressReporter:
             return
         self._last_paint = now
 
-        width = max(40, shutil.get_terminal_size((100, 24)).columns)
+        # 保留最後一欄不用：游標剛好停在最右緣時，部分終端機會自動換行。
+        width = max(40, shutil.get_terminal_size((100, 24)).columns - 1)
         lines = [self._render(task, width) for task in list(self._tasks.values())]
         self._erase()
         for line in lines:
-            self.stream.write(line[:width] + "\n")
+            self.stream.write(truncate(line, width) + "\n")
         self._drawn = len(lines)
         self.stream.flush()
 
     def _render(self, task: _Task, width: int) -> str:
         bar_width = 18
         filled = int(task.percent / 100 * bar_width)
-        bar = "█" * filled + "░" * (bar_width - filled)
+        # 刻意用 ASCII：方塊繪圖字元在中日韓終端機是雙寬，畫出來的列會超寬換行。
+        bar = "#" * filled + "-" * (bar_width - filled)
         speed = f"{human_size(task.speed)}/s" if task.speed else "--"
         tail = f"[{bar}] {task.percent:5.1f}%  {speed:>11}  ETA {human_time(task.eta)}"
-        label_width = max(12, width - len(tail) - 4)
-        return f"  {truncate(task.label, label_width):<{label_width}} {tail}"
+        label_width = max(12, width - display_width(tail) - 4)
+        return f"  {pad_display(truncate(task.label, label_width), label_width)} {tail}"
 
 
 def _status_line(status: str, message: str, done: int, total: int) -> str:

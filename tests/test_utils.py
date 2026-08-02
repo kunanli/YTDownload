@@ -1,8 +1,9 @@
 import pytest
 
 from ytmusic.utils import (
-    classify_url, clean_title, human_size, human_time, is_radio_playlist,
-    parse_browser_spec, sanitize_filename, split_artist_title, strip_topic, truncate,
+    classify_url, clean_title, display_width, human_size, human_time,
+    is_radio_playlist, pad_display, parse_browser_spec, sanitize_filename,
+    split_artist_title, strip_topic, truncate,
 )
 
 
@@ -179,4 +180,66 @@ class TestFormatting:
 
     def test_truncate(self):
         assert truncate("abcdef", 10) == "abcdef"
-        assert truncate("abcdef", 4) == "abc…"
+        # 省略號本身在中日韓字型下佔 2 欄，所以 4 欄只放得下 2 個字母
+        assert truncate("abcdef", 4) == "ab…"
+
+
+class TestDisplayWidth:
+    def test_ascii_is_one_column_each(self):
+        assert display_width("abc") == 3
+
+    def test_cjk_is_two_columns_each(self):
+        assert display_width("告白氣球") == 8
+        assert display_width("マッシュル") == 10
+
+    def test_mixed(self):
+        assert display_width("YOASOBI「アイドル」") == 7 + 2 * 6
+
+    def test_block_characters_have_inconsistent_widths(self):
+        # 原本的進度列用 █ 當已完成、░ 當未完成，但兩者寬度不同：
+        # █ 是 Ambiguous（中日韓下算 2 欄），░ 是 Neutral（1 欄）。
+        # 於是同一條 18 格的列會隨著進度從 18 欄長到 36 欄——這就是破版主因，
+        # 也是進度列改用純 ASCII 的原因。
+        assert display_width("█") == 2
+        assert display_width("░") == 1
+        assert display_width("#" * 18) == display_width("-" * 18) == 18
+
+    def test_check_marks_are_neutral_width(self):
+        # ✔✖ 的 East Asian Width 是 N（單寬）。它們只出現在會自然捲動的
+        # 訊息列，不在需要精準對齊的進度區塊裡。
+        assert display_width("✔") == 1
+        assert display_width("✖") == 1
+
+    def test_combining_marks_take_no_space(self):
+        assert display_width("é") == 1
+
+    def test_empty(self):
+        assert display_width("") == 0
+
+
+class TestTruncateDisplayWidth:
+    def test_cjk_truncated_by_columns_not_characters(self):
+        # 6 欄 = 省略號 2 欄 + 2 個日文字 4 欄
+        assert truncate("マッシュル -MASHLE-", 6) == "マッ…"
+
+    def test_result_never_exceeds_requested_width(self):
+        title = "Creepy Nuts「Bling-Bang-Bang-Born」×TV Anime「マッシュル -MASHLE-」"
+        for width in range(1, 60):
+            assert display_width(truncate(title, width)) <= width
+
+    def test_exact_fit_is_untouched(self):
+        assert truncate("告白氣球", 8) == "告白氣球"
+
+    def test_too_narrow_for_ellipsis_returns_blanks(self):
+        assert truncate("告白氣球", 1) == " "
+
+    def test_zero_width(self):
+        assert truncate("abc", 0) == ""
+
+
+class TestPadDisplay:
+    def test_pads_cjk_by_columns(self):
+        assert pad_display("告白", 8) == "告白    "  # 4 欄 + 4 空白
+
+    def test_no_padding_when_already_wide_enough(self):
+        assert pad_display("abcdef", 3) == "abcdef"

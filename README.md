@@ -321,13 +321,37 @@ pip install -U yt-dlp
 ytmusic dl "網址" -v
 ```
 
-## 同一首歌想重新下載
+## 下載過的我還想再下載一次
 
-工具會記住下載過什麼，預設不會重複下載。想強制重下：
+工具會記住下載過什麼，第二次跑同一張清單時會自動略過，像這樣：
+
+```
+共 90 首；待下載 81 首，略過 9 首（已下載過）
+```
+
+想連略過的那些一起重新下載，加 `--force`：
 
 ```powershell
-ytmusic dl "網址" --force
+ytmusic dl "網址" --playlist --force
 ```
+
+只想重下其中一首的話，也可以把那筆紀錄刪掉：
+
+```powershell
+ytmusic history list          # 找到那首的影片 ID
+ytmusic history remove <ID>
+```
+
+## 「我喜歡的音樂」或私人清單下載不了
+
+清單代號是 `LM`（我喜歡的音樂）或其他私人清單，是綁在你帳號底下的，
+沒有登入就會出現 `HTTP Error 404`。要加上登入資訊：
+
+```powershell
+ytmusic dl "https://music.youtube.com/playlist?list=LM" --playlist --cookies-from-browser chrome
+```
+
+記得**先把 Chrome 完全關掉**，詳見上面[「HTTP Error 403」或「需要登入」](#http-error-403或需要登入)。
 
 ## 怎麼更新這個工具
 

@@ -118,11 +118,51 @@ def human_time(seconds: float | None) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def display_width(text: str) -> int:
+    """字串在終端機上實際佔用的欄數。
+
+    中日韓文字是雙倍寬，用 len() 計算會讓進度列遠超出畫面寬度而自動換行；
+    一換行，重繪時「往上幾列」就對不上，畫面會殘留一堆重複的舊列。
+
+    East Asian Width 為 A（ambiguous）的字元——包括 ✔✖ 和方塊繪圖字元——在
+    中日韓字型下多半也是雙寬，這裡一律保守算 2：算多了只是列稍微短一點，
+    算少了就會破版。
+    """
+    width = 0
+    for char in text:
+        if unicodedata.combining(char):
+            continue  # 組合用附加符號不佔位
+        width += 2 if unicodedata.east_asian_width(char) in ("W", "F", "A") else 1
+    return width
+
+
 def truncate(text: str, width: int) -> str:
-    """把過長的文字截斷成固定寬度，尾端補上省略號。"""
-    if width <= 1 or len(text) <= width:
+    """把文字截斷到指定的「顯示欄寬」（非字元數），尾端補上省略號。"""
+    if width <= 0:
+        return ""
+    if display_width(text) <= width:
         return text
-    return text[: width - 1] + "…"
+
+    ellipsis = "…"
+    ellipsis_width = display_width(ellipsis)
+    if width <= ellipsis_width:
+        return " " * width  # 連省略號都放不下，留空白避免破版
+
+    budget = width - ellipsis_width
+    kept: list[str] = []
+    used = 0
+    for char in text:
+        char_width = display_width(char)
+        if used + char_width > budget:
+            break
+        kept.append(char)
+        used += char_width
+    return "".join(kept) + ellipsis
+
+
+def pad_display(text: str, width: int) -> str:
+    """依顯示欄寬靠左對齊補空白（len() 對中日韓文字會補錯）。"""
+    return text + " " * max(0, width - display_width(text))
 
 
 # yt-dlp 的瀏覽器 cookies 規格：BROWSER[+KEYRING][:PROFILE][::CONTAINER]
