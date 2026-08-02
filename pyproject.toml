@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ytmusic"
+version = "0.1.0"
+description = "YouTube 音樂下載器：下載音訊、轉檔、寫入標籤與封面，並記錄下載歷史"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = [
+    "yt-dlp>=2024.1.1",
+    "mutagen>=1.46",
+]
+
+[project.optional-dependencies]
+cover = ["Pillow>=10.0"]
+dev = ["pytest>=7.0"]
+
+[project.scripts]
+ytmusic = "ytmusic.cli:main"
+
+[tool.setuptools]
+packages = ["ytmusic"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

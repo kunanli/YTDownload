@@ -1,0 +1,465 @@
+"""下載流程核心：展開播放清單、平行下載、轉檔與標籤寫入。"""
+
+from __future__ import annotations
+
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, field
+from pathlib import Path
+
+from .config import Config
+from .history import History
+from .progress import ProgressReporter
+from .tagger import (
+    TaggingError, TrackMeta, apply_tags, build_metadata, fetch_cover,
+    pick_thumbnail_url,
+)
+from .utils import find_ffmpeg, sanitize_filename
+
+# mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
+_BEST_VBR = "0"
+
+
+@dataclass
+class Track:
+    """待下載的單一曲目。"""
+
+    video_id: str
+    url: str
+    title: str
+    playlist_title: str | None = None
+    playlist_index: int | None = None
+    playlist_count: int | None = None
+
+    @property
+    def label(self) -> str:
+        return self.title or self.video_id
+
+
+@dataclass
+class Result:
+    track: Track
+    status: str  # ok | skipped | error
+    path: Path | None = None
+    message: str = ""
+    warnings: list[str] = field(default_factory=list)
+
+
+class DownloadAborted(RuntimeError):
+    """使用者中斷或前置條件不足時拋出。"""
+
+
+class _CollectingLogger:
+    """吞掉 yt-dlp 的一般輸出，只保留錯誤訊息供事後回報。"""
+
+    def __init__(self) -> None:
+        self.errors: list[str] = []
+
+    def debug(self, msg: str) -> None:  # pragma: no cover - yt-dlp 介面
+        pass
+
+    def info(self, msg: str) -> None:  # pragma: no cover - yt-dlp 介面
+        pass
+
+    def warning(self, msg: str) -> None:  # pragma: no cover - yt-dlp 介面
+        pass
+
+    def error(self, msg: str) -> None:
+        self.errors.append(str(msg).strip())
+
+
+class Downloader:
+    """把一串網址變成硬碟上帶好標籤的音樂檔。"""
+
+    def __init__(self, config: Config, history: History | None = None,
+                 reporter: ProgressReporter | None = None) -> None:
+        self.config = config
+        self.history = history
+        self.reporter = reporter
+        self._stop = threading.Event()
+
+    # -- 前置檢查 ---------------------------------------------------------
+
+    def preflight(self) -> None:
+        problems = self.config.validate()
+        if problems:
+            raise DownloadAborted("；".join(problems))
+        if self.config.convert and not find_ffmpeg():
+            from .utils import FFMPEG_HINT
+            raise DownloadAborted(FFMPEG_HINT)
+        self.config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    def cancel(self) -> None:
+        self._stop.set()
+
+    # -- 展開網址 ---------------------------------------------------------
+
+    def expand(self, urls: list[str]) -> list[Track]:
+        """把播放清單／頻道網址攤平成曲目清單，並依影片 ID 去重。"""
+        from yt_dlp import YoutubeDL
+
+        # extract_flat="in_playlist" 只攤平清單內的影片，頻道底下的分頁清單仍會
+        # 被解析，所以這裡保留 yt-dlp 的預設處理流程（process=True）。
+        opts = self._base_opts()
+        opts.update({
+            "extract_flat": "in_playlist",
+            "skip_download": True,
+            # 攔下 yt-dlp 的錯誤輸出，改由我們統一格式化，避免同一則訊息印兩次。
+            "logger": _CollectingLogger(),
+        })
+
+        tracks: list[Track] = []
+        seen: set[str] = set()
+        with YoutubeDL(opts) as ydl:
+            for url in urls:
+                try:
+                    info = ydl.extract_info(url, download=False)
+                except Exception as exc:
+                    self._log(f"✖ 無法讀取 {url}：{_short_error(exc)}")
+                    continue
+                if info is None:
+                    self._log(f"✖ 無法讀取 {url}")
+                    continue
+                for track in _walk(info):
+                    if track.video_id in seen:
+                        continue
+                    seen.add(track.video_id)
+                    tracks.append(track)
+        return tracks
+
+    def filter_new(self, tracks: list[Track], force: bool = False) -> tuple[list[Track], list[Track]]:
+        """依下載歷史把曲目分成「要下載」與「已下載可略過」兩堆。"""
+        if force or not self.config.use_history or self.history is None:
+            return tracks, []
+        known = self.history.known_ids([t.video_id for t in tracks])
+        pending = [t for t in tracks if t.video_id not in known]
+        skipped = [t for t in tracks if t.video_id in known]
+        return pending, skipped
+
+    # -- 執行 -------------------------------------------------------------
+
+    def run(self, tracks: list[Track]) -> list[Result]:
+        """平行下載所有曲目，回傳與輸入順序無關的結果清單。"""
+        if not tracks:
+            return []
+        workers = min(self.config.concurrency, len(tracks))
+        results: list[Result] = []
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="ytmusic") as pool:
+            futures = {pool.submit(self._download_one, t): t for t in tracks}
+            try:
+                for future in as_completed(futures):
+                    results.append(future.result())
+            except KeyboardInterrupt:
+                self.cancel()
+                for future in futures:
+                    future.cancel()
+                raise
+        return results
+
+    # -- 單曲下載 ---------------------------------------------------------
+
+    def _download_one(self, track: Track) -> Result:
+        from yt_dlp import YoutubeDL
+        from yt_dlp.utils import DownloadError
+
+        if self._stop.is_set():
+            return Result(track, "error", message="已取消")
+
+        logger = _CollectingLogger()
+        opts = self._download_opts(track, logger)
+
+        if self.reporter:
+            self.reporter.start(track.video_id, track.label)
+        try:
+            with YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(track.url, download=True)
+            if info is None:
+                raise DownloadError("yt-dlp 沒有回傳任何資訊")
+            path = _final_path(info)
+            if path is None or not path.is_file():
+                raise DownloadError("下載結束但找不到輸出檔案")
+        except KeyboardInterrupt:
+            self._stop.set()
+            if self.reporter:
+                self.reporter.finish(track.video_id, "error", f"{track.label} — 已取消")
+            return Result(track, "error", message="已取消")
+        except Exception as exc:
+            message = _short_error(exc) or (logger.errors[-1] if logger.errors else str(exc))
+            if self.reporter:
+                self.reporter.finish(track.video_id, "error", f"{track.label} — {message}")
+            return Result(track, "error", message=message)
+
+        warnings: list[str] = []
+        meta = build_metadata(
+            info,
+            playlist_title=track.playlist_title,
+            playlist_index=track.playlist_index,
+            playlist_count=track.playlist_count,
+        )
+
+        if self.config.write_tags:
+            if self.reporter:
+                self.reporter.update(track.video_id, stage="寫入標籤", percent=100.0)
+            cover = self._maybe_cover(info)
+            try:
+                apply_tags(path, meta, cover)
+            except TaggingError as exc:
+                warnings.append(str(exc))
+
+        if self.config.rename_from_tags:
+            # yt-dlp 的樣板只看得到原始欄位，檔名會留著 "(Official Video)" 這類雜訊，
+            # 也常把演出者重複兩次；這裡改用整理過的中繼資料重新命名。
+            path = _rename_from_meta(
+                path, meta,
+                number=self.config.playlist_folder,
+                replaceable=self._previous_path(track.video_id),
+            ) or path
+
+        self._record(track, meta, path, info)
+
+        if self.reporter:
+            suffix = f"（{warnings[0]}）" if warnings else ""
+            self.reporter.finish(track.video_id, "ok", f"{meta.as_display()}{suffix}")
+        return Result(track, "ok", path=path, message=meta.as_display(), warnings=warnings)
+
+    def _maybe_cover(self, info: dict) -> bytes | None:
+        if not self.config.embed_cover:
+            return None
+        url = pick_thumbnail_url(info)
+        if not url:
+            return None
+        return fetch_cover(url, square=self.config.square_cover)
+
+    def _previous_path(self, video_id: str) -> Path | None:
+        """同一支影片上次下載到的位置（重下時用來覆寫自己而非產生副本）。"""
+        if self.history is None or not self.config.use_history:
+            return None
+        entry = self.history.get(video_id)
+        return entry.path if entry and entry.filepath else None
+
+    def _record(self, track: Track, meta: TrackMeta, path: Path, info: dict) -> None:
+        if not self.config.use_history or self.history is None:
+            return
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        self.history.add(
+            track.video_id,
+            title=meta.title,
+            artist=meta.artist,
+            album=meta.album,
+            url=info.get("webpage_url") or track.url,
+            filepath=path,
+            audio_format=path.suffix.lstrip("."),
+            filesize=size,
+        )
+
+    # -- yt-dlp 選項 ------------------------------------------------------
+
+    def _base_opts(self) -> dict:
+        opts: dict = {
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "consoletitle": False,
+            "ignoreerrors": False,
+            "retries": 5,
+            "fragment_retries": 5,
+            "socket_timeout": 30,
+        }
+        if self.config.proxy:
+            opts["proxy"] = self.config.proxy
+        if self.config.cookies_file:
+            opts["cookiefile"] = str(Path(self.config.cookies_file).expanduser())
+        if self.config.cookies_from_browser:
+            opts["cookiesfrombrowser"] = (self.config.cookies_from_browser,)
+        if self.config.rate_limit:
+            limit = _parse_rate(self.config.rate_limit)
+            if limit:
+                opts["ratelimit"] = limit
+        return opts
+
+    def _download_opts(self, track: Track, logger: _CollectingLogger) -> dict:
+        opts = self._base_opts()
+        opts.update({
+            "format": "bestaudio/best",
+            "noplaylist": True,
+            "outtmpl": {"default": self._outtmpl(track)},
+            "logger": logger,
+            "postprocessors": self._postprocessors(),
+            "progress_hooks": [lambda d: self._on_progress(track.video_id, d)],
+            "postprocessor_hooks": [lambda d: self._on_postprocess(track.video_id, d)],
+            "overwrites": True,
+            "windowsfilenames": True,
+            "trim_file_name": 150,
+        })
+        return opts
+
+    def _postprocessors(self) -> list[dict]:
+        if not self.config.convert:
+            return []
+        quality = _BEST_VBR if self.config.quality == "best" else self.config.quality
+        return [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": self.config.audio_format,
+            "preferredquality": quality,
+        }]
+
+    def _outtmpl(self, track: Track) -> str:
+        root = self.config.output_dir
+        if self.config.playlist_folder and track.playlist_title:
+            root = root / sanitize_filename(track.playlist_title)
+            root.mkdir(parents=True, exist_ok=True)
+        return str(root / self.config.filename_template)
+
+    # -- 回呼 -------------------------------------------------------------
+
+    def _on_progress(self, key: str, data: dict) -> None:
+        if self._stop.is_set():
+            raise KeyboardInterrupt
+        if self.reporter is None or data.get("status") != "downloading":
+            return
+        total = data.get("total_bytes") or data.get("total_bytes_estimate") or 0
+        downloaded = data.get("downloaded_bytes") or 0
+        percent = (downloaded / total * 100) if total else 0.0
+        self.reporter.update(
+            key,
+            percent=percent,
+            speed=data.get("speed"),
+            eta=data.get("eta"),
+            stage="下載中",
+        )
+
+    def _on_postprocess(self, key: str, data: dict) -> None:
+        if self.reporter is None or data.get("status") != "started":
+            return
+        name = data.get("postprocessor") or ""
+        stage = "轉檔中" if "ExtractAudio" in name else "處理中"
+        self.reporter.update(key, percent=100.0, speed=None, eta=None, stage=stage)
+
+    def _log(self, message: str) -> None:
+        if self.reporter:
+            self.reporter.log(message)
+
+
+# --------------------------------------------------------------------------
+# 輔助函式
+# --------------------------------------------------------------------------
+
+def _walk(info: dict, playlist_title: str | None = None,
+          playlist_count: int | None = None) -> list[Track]:
+    """遞迴走訪 yt-dlp 的 info 樹，攤平成 Track 清單。"""
+    if info.get("_type") in {"playlist", "multi_video"}:
+        title = info.get("title") or playlist_title
+        entries = info.get("entries") or []
+        entries = list(entries)  # entries 可能是產生器
+        count = info.get("playlist_count") or len(entries)
+        tracks: list[Track] = []
+        for index, entry in enumerate(entries, start=1):
+            if not entry:
+                continue
+            children = _walk(entry, playlist_title=title, playlist_count=count)
+            for child in children:
+                if child.playlist_index is None:
+                    child.playlist_index = index
+            tracks.extend(children)
+        return tracks
+
+    video_id = info.get("id")
+    if not video_id:
+        return []
+    # 未展開的巢狀清單參照（YoutubeTab、YoutubePlaylist 等）不是曲目，直接略過。
+    if info.get("_type") == "url":
+        ie_key = str(info.get("ie_key") or "").lower()
+        if any(token in ie_key for token in ("playlist", "tab", "channel", "user")):
+            return []
+    url = (
+        info.get("webpage_url")
+        or info.get("original_url")
+        or info.get("url")
+        or f"https://www.youtube.com/watch?v={video_id}"
+    )
+    return [Track(
+        video_id=str(video_id),
+        url=url,
+        title=info.get("title") or str(video_id),
+        playlist_title=playlist_title,
+        playlist_count=playlist_count,
+    )]
+
+
+def _rename_from_meta(path: Path, meta: TrackMeta, *, number: bool = False,
+                      replaceable: Path | None = None) -> Path | None:
+    """依中繼資料把檔案改名成「演出者 - 歌名」，失敗時回傳 None 保留原檔名。"""
+    if not meta.title:
+        return None
+    stem = f"{meta.artist} - {meta.title}" if meta.artist else meta.title
+    if number and meta.track_number:
+        # 專輯／清單資料夾裡加上曲序，檔案總管排序才會對。
+        stem = f"{meta.track_number:02d} - {stem}"
+    stem = sanitize_filename(stem)
+    if stem == "untitled":
+        return None
+
+    target = path.with_name(stem + path.suffix)
+    if target == path:  # 名字已經對了，別讓 _unique_path 誤加 (2)
+        return path
+    target = _unique_path(target, replaceable)
+    try:
+        path.replace(target)
+    except OSError:
+        return None
+    return target
+
+
+def _unique_path(target: Path, replaceable: Path | None = None) -> Path:
+    """在檔名後加 (2)、(3)… 直到不與既有檔案衝突。
+
+    ``replaceable`` 是同一支影片上次下載的檔案；覆寫自己不算衝突，否則重下同一首歌
+    會不斷產生 (2)、(3)。
+    """
+    if not target.exists():
+        return target
+    if replaceable is not None and target == replaceable:
+        return target
+    for index in range(2, 1000):
+        candidate = target.with_name(f"{target.stem} ({index}){target.suffix}")
+        if not candidate.exists():
+            return candidate
+    return target
+
+
+def _final_path(info: dict) -> Path | None:
+    """從 info dict 找出後處理完成後的實際檔案路徑。"""
+    for entry in info.get("requested_downloads") or []:
+        path = entry.get("filepath") or entry.get("_filename")
+        if path:
+            return Path(path)
+    path = info.get("filepath") or info.get("_filename")
+    return Path(path) if path else None
+
+
+def _parse_rate(value: str) -> int | None:
+    """把 "500K"、"1.5M" 之類的限速字串轉成每秒位元組數。"""
+    text = value.strip().upper().rstrip("B")
+    if not text:
+        return None
+    multiplier = 1
+    if text[-1] in {"K", "M", "G"}:
+        multiplier = {"K": 1024, "M": 1024 ** 2, "G": 1024 ** 3}[text[-1]]
+        text = text[:-1]
+    try:
+        return int(float(text) * multiplier)
+    except ValueError:
+        return None
+
+
+def _short_error(exc: Exception) -> str:
+    """把 yt-dlp 冗長的錯誤訊息壓成一行。"""
+    message = str(exc).strip()
+    message = message.replace("ERROR: ", "")
+    for marker in (";", " Please report", "\n"):
+        if marker in message:
+            message = message.split(marker)[0]
+    return message.strip()[:200]

@@ -1,0 +1,22 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 下載產物與本機資料
+downloads/
+*.mp3
+*.m4a
+*.opus
+*.flac
+*.wav
+*.webm
+*.part
+history.db
+config.json
