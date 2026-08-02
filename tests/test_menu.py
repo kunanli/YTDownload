@@ -2,7 +2,10 @@ import io
 
 import pytest
 
-from ytmusic.menu import MENU_ITEMS, Cancelled, build_command, render_menu, run_menu
+from ytmusic.menu import (
+    LANGUAGE_CHOICES, MENU_ITEMS, Cancelled, ask_languages, build_command,
+    render_menu, run_menu,
+)
 
 
 class Asker:
@@ -53,14 +56,24 @@ class TestBuildCommand:
             "dl", "https://youtu.be/a", "--video", "720"
         ]
 
-    def test_audio_can_ask_for_lyrics(self):
-        assert build_command("1", Asker("https://youtu.be/a", "y")) == [
+    def test_audio_lyrics_without_language_uses_default(self):
+        assert build_command("1", Asker("https://youtu.be/a", "y", "")) == [
             "dl", "https://youtu.be/a", "--lyrics"
         ]
 
-    def test_video_can_ask_for_subs(self):
-        assert build_command("4", Asker("https://youtu.be/a", "", "y")) == [
+    def test_audio_lyrics_with_chosen_languages(self):
+        assert build_command("1", Asker("https://youtu.be/a", "y", "1,3")) == [
+            "dl", "https://youtu.be/a", "--lyrics", "繁中,英"
+        ]
+
+    def test_video_subs_without_language_uses_default(self):
+        assert build_command("4", Asker("https://youtu.be/a", "", "y", "")) == [
             "dl", "https://youtu.be/a", "--video", "720", "--subs"
+        ]
+
+    def test_video_subs_with_chosen_languages(self):
+        assert build_command("4", Asker("https://youtu.be/a", "", "y", "4,5")) == [
+            "dl", "https://youtu.be/a", "--video", "720", "--subs", "日,韓"
         ]
 
     @pytest.mark.parametrize("answer,expected", [("1", "720"), ("2", "1080"), ("3", "best")])
@@ -144,3 +157,70 @@ class TestRunMenu:
     def test_q_also_exits(self):
         _, calls, _ = self._run("q")
         assert calls == []
+
+
+class TestAskLanguages:
+    def test_enter_means_use_default(self):
+        assert ask_languages(Asker(""), "字幕") == ""
+
+    def test_single_choice(self):
+        assert ask_languages(Asker("1"), "字幕") == "繁中"
+
+    def test_multiple_choices_keep_order(self):
+        assert ask_languages(Asker("3,1"), "字幕") == "英,繁中"
+
+    def test_full_width_comma(self):
+        assert ask_languages(Asker("1，3"), "字幕") == "繁中,英"
+
+    def test_all_six(self):
+        assert ask_languages(Asker("1,2,3,4,5,6"), "字幕") == "繁中,簡中,英,日,韓,西班牙"
+
+    def test_deduplicates(self):
+        assert ask_languages(Asker("1,1,3"), "字幕") == "繁中,英"
+
+    def test_invalid_tokens_ignored(self):
+        assert ask_languages(Asker("1,99,abc"), "字幕") == "繁中"
+
+    def test_all_invalid_falls_back_to_default(self):
+        assert ask_languages(Asker("99"), "字幕") == ""
+
+    def test_prompt_lists_every_language(self):
+        asker = Asker("")
+        ask_languages(asker, "字幕")
+        for _, name in LANGUAGE_CHOICES:
+            assert name in asker.prompts[0]
+
+
+class TestPlaylistPrompts:
+    def test_plain_video_asks_nothing_extra(self):
+        # 單曲網址：只會問歌詞，不會問清單
+        assert build_command("1", Asker("https://youtu.be/a", "")) == [
+            "dl", "https://youtu.be/a"
+        ]
+
+    def test_pure_playlist_offers_folder(self):
+        url = "https://www.youtube.com/playlist?list=PL1"
+        assert build_command("1", Asker(url, "", "y")) == [
+            "dl", url, "--playlist-folder"
+        ]
+
+    def test_pure_playlist_folder_declined(self):
+        url = "https://www.youtube.com/playlist?list=PL1"
+        assert build_command("1", Asker(url, "", "")) == ["dl", url]
+
+    def test_ambiguous_url_can_choose_single(self):
+        url = "https://www.youtube.com/watch?v=a&list=PL1"
+        assert build_command("1", Asker(url, "", "")) == ["dl", url, "--single"]
+
+    def test_ambiguous_url_can_choose_whole_playlist(self):
+        url = "https://www.youtube.com/watch?v=a&list=PL1"
+        assert build_command("1", Asker(url, "", "y", "y")) == [
+            "dl", url, "--playlist", "--playlist-folder"
+        ]
+
+    def test_batch_video_with_subtitles(self):
+        # 使用者要的：整張清單下載影片，而且能選字幕語言
+        url = "https://www.youtube.com/playlist?list=PL1"
+        assert build_command("4", Asker(url, "2", "y", "1,3", "y")) == [
+            "dl", url, "--video", "1080", "--subs", "繁中,英", "--playlist-folder"
+        ]

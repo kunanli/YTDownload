@@ -19,6 +19,41 @@ BANNER = """
 
 VIDEO_CHOICES = {"1": "720", "2": "1080", "3": "best"}
 
+# 選單裡的字幕／歌詞語言，值直接餵給 --subs / --lyrics（lyrics.py 認得中文別名）。
+LANGUAGE_CHOICES = (
+    ("1", "繁中"), ("2", "簡中"), ("3", "英"),
+    ("4", "日"), ("5", "韓"), ("6", "西班牙"),
+)
+YES = {"y", "yes", "要", "1"}
+
+
+def ask_yes(ask: Callable[[str], str], question: str) -> bool:
+    return ask(f"  {question}[y/Enter=不用] ").strip().lower() in YES
+
+
+def ask_languages(ask: Callable[[str], str], what: str) -> str:
+    """讓使用者挑字幕／歌詞語言，回傳像 "繁中,英" 的字串。
+
+    直接按 Enter 代表全部語言都試（有哪個抓哪個），跟設定檔的預設一致。
+    """
+    options = "　".join(f"[{key}] {name}" for key, name in LANGUAGE_CHOICES)
+    ask_text = (
+        f"\n   {options}\n"
+        f"   可複選，用逗號分隔（例如 1,3）\n"
+        f"  {what}語言（直接按 Enter = 全部）："
+    )
+    answer = ask(ask_text).strip()
+    if not answer:
+        return ""  # 空字串＝沿用設定檔的語言清單
+
+    table = dict(LANGUAGE_CHOICES)
+    picked = [
+        table[token.strip()]
+        for token in answer.replace("，", ",").split(",")
+        if table.get(token.strip())
+    ]
+    return ",".join(dict.fromkeys(picked))  # 去重且保留順序
+
 
 @dataclass(frozen=True)
 class MenuItem:
@@ -63,8 +98,10 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         url = ask("  貼上網址後按 Enter：").strip()
         if not url:
             return None
-        want = ask("  要一起抓歌詞嗎？[y/Enter=不用] ").strip().lower()
-        return ["dl", url, "--lyrics"] if want in {"y", "yes", "要"} else ["dl", url]
+        command = ["dl", url]
+        if ask_yes(ask, "要一起抓歌詞嗎？"):
+            command += _lang_flag("--lyrics", ask_languages(ask, "歌詞"))
+        return command + _playlist_flags(url, ask)
 
     if choice == "2":
         keyword = ask("  要找什麼歌？ ").strip()
@@ -80,9 +117,10 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
             return None
         answer = ask("\n   畫質：[1] 720p　[2] 1080p　[3] 最高\n  請選擇（直接按 Enter = 720p）：")
         quality = VIDEO_CHOICES.get(answer.strip() or "1", "720")
-        want = ask("  要一起嵌入字幕嗎？[y/Enter=不用] ").strip().lower()
         command = ["dl", url, "--video", quality]
-        return command + ["--subs"] if want in {"y", "yes", "要"} else command
+        if ask_yes(ask, "要一起嵌入字幕嗎？"):
+            command += _lang_flag("--subs", ask_languages(ask, "字幕"))
+        return command + _playlist_flags(url, ask)
 
     if choice == "5":
         return ["sync"]
@@ -101,6 +139,29 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         return command
 
     return None
+
+
+def _lang_flag(flag: str, languages: str) -> list[str]:
+    """語言選了就帶上，沒選就只給旗標讓它用設定檔的預設。"""
+    return [flag, languages] if languages else [flag]
+
+
+def _playlist_flags(url: str, ask: Callable[[str], str]) -> list[str]:
+    """網址是播放清單時，問要不要整張下載、要不要收進獨立資料夾。"""
+    from .utils import classify_url
+
+    kind = classify_url(url)
+    if kind == "playlist":  # 純清單網址，本來就會整張下載
+        return ["--playlist-folder"] if ask_yes(ask, "每張清單收進獨立資料夾嗎？") else []
+    if kind != "both":
+        return []
+
+    if not ask_yes(ask, "這個網址含整張播放清單，要全部下載嗎？"):
+        return ["--single"]
+    flags = ["--playlist"]
+    if ask_yes(ask, "收進以清單命名的資料夾嗎？"):
+        flags.append("--playlist-folder")
+    return flags
 
 
 def run_menu(runner: Callable[[list[str]], int] | None = None, *,
