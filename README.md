@@ -183,7 +183,19 @@ cookies 才下載得動：
 ytmusic dl <URL> --cookies-from-browser chrome
 ```
 
+**看不懂失敗原因** — 加上 `-v` 會印出 yt-dlp 的完整診斷輸出：
+
+```bash
+ytmusic dl <URL> -v --dry-run
+```
+
 **下載一直失敗或速度異常** — yt-dlp 需要跟著 YouTube 的改動更新，先試 `pip install -U yt-dlp`。
+
+**`Video unavailable`** — 影片本身被移除、設為私人，或該地區看不到。換一支影片或改用
+`--cookies-from-browser` 試試。
+
+**YouTube Music 的網址** — `music.youtube.com/watch?v=...` 直接支援，網址後面的 `&si=...`
+分享參數不用刪。在 PowerShell 記得整串用雙引號括起來，否則 `&` 會被當成指令分隔符。
 
 **已經下載過但想重下** — 用 `--force`，或 `ytmusic history remove <影片ID>`。
 

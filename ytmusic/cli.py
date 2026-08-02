@@ -77,6 +77,8 @@ def _add_download_parser(sub) -> None:
     p.add_argument("--proxy", metavar="URL", help="HTTP/SOCKS 代理伺服器")
     p.add_argument("--rate-limit", metavar="RATE", help="限速，例如 500K、1.5M")
     p.add_argument("--no-progress", action="store_true", help="關閉進度列，只輸出純文字")
+    p.add_argument("-v", "--verbose", action="store_true",
+                   help="印出 yt-dlp 的完整診斷輸出，用來查明失敗原因")
     p.set_defaults(func=cmd_download)
 
 
@@ -150,8 +152,12 @@ def cmd_download(args: argparse.Namespace) -> int:
         return EXIT_PRECONDITION
 
     history = History() if config.use_history else None
-    reporter = ProgressReporter(total=0, enabled=not args.no_progress)
-    downloader = Downloader(config, history=history, reporter=reporter)
+    # -v 時關掉進度列：yt-dlp 的診斷輸出會跟 ANSI 重繪互相蓋掉。
+    reporter = ProgressReporter(
+        total=0, enabled=not (args.no_progress or args.verbose)
+    )
+    downloader = Downloader(config, history=history, reporter=reporter,
+                            verbose=args.verbose)
 
     try:
         downloader.preflight()

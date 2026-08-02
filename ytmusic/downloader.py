@@ -72,10 +72,12 @@ class Downloader:
     """把一串網址變成硬碟上帶好標籤的音樂檔。"""
 
     def __init__(self, config: Config, history: History | None = None,
-                 reporter: ProgressReporter | None = None) -> None:
+                 reporter: ProgressReporter | None = None,
+                 verbose: bool = False) -> None:
         self.config = config
         self.history = history
         self.reporter = reporter
+        self.verbose = verbose
         self._stop = threading.Event()
 
     # -- 前置檢查 ---------------------------------------------------------
@@ -100,13 +102,15 @@ class Downloader:
 
         # extract_flat="in_playlist" 只攤平清單內的影片，頻道底下的分頁清單仍會
         # 被解析，所以這裡保留 yt-dlp 的預設處理流程（process=True）。
+        logger = _CollectingLogger()
         opts = self._base_opts()
         opts.update({
             "extract_flat": "in_playlist",
             "skip_download": True,
-            # 攔下 yt-dlp 的錯誤輸出，改由我們統一格式化，避免同一則訊息印兩次。
-            "logger": _CollectingLogger(),
         })
+        if not self.verbose:
+            # 攔下 yt-dlp 的錯誤輸出，改由我們統一格式化，避免同一則訊息印兩次。
+            opts["logger"] = logger
 
         tracks: list[Track] = []
         seen: set[str] = set()
@@ -115,7 +119,7 @@ class Downloader:
                 try:
                     info = ydl.extract_info(url, download=False)
                 except Exception as exc:
-                    self._log(f"✖ 無法讀取 {url}：{_short_error(exc)}")
+                    self._log(f"✖ 無法讀取 {url}：{_short_error(exc, logger)}")
                     continue
                 if info is None:
                     self._log(f"✖ 無法讀取 {url}")
@@ -184,7 +188,7 @@ class Downloader:
                 self.reporter.finish(track.video_id, "error", f"{track.label} — 已取消")
             return Result(track, "error", message="已取消")
         except Exception as exc:
-            message = _short_error(exc) or (logger.errors[-1] if logger.errors else str(exc))
+            message = _short_error(exc, logger)
             if self.reporter:
                 self.reporter.finish(track.video_id, "error", f"{track.label} — {message}")
             return Result(track, "error", message=message)
@@ -259,8 +263,9 @@ class Downloader:
 
     def _base_opts(self) -> dict:
         opts: dict = {
-            "quiet": True,
-            "no_warnings": True,
+            "quiet": not self.verbose,
+            "no_warnings": not self.verbose,
+            "verbose": self.verbose,
             "noprogress": True,
             "consoletitle": False,
             "ignoreerrors": False,
@@ -286,7 +291,6 @@ class Downloader:
             "format": "bestaudio/best",
             "noplaylist": True,
             "outtmpl": {"default": self._outtmpl(track)},
-            "logger": logger,
             "postprocessors": self._postprocessors(),
             "progress_hooks": [lambda d: self._on_progress(track.video_id, d)],
             "postprocessor_hooks": [lambda d: self._on_postprocess(track.video_id, d)],
@@ -294,6 +298,8 @@ class Downloader:
             "windowsfilenames": True,
             "trim_file_name": 150,
         })
+        if not self.verbose:  # -v 時讓 yt-dlp 直接印出完整診斷訊息
+            opts["logger"] = logger
         return opts
 
     def _postprocessors(self) -> list[dict]:
@@ -455,11 +461,24 @@ def _parse_rate(value: str) -> int | None:
         return None
 
 
-def _short_error(exc: Exception) -> str:
-    """把 yt-dlp 冗長的錯誤訊息壓成一行。"""
-    message = str(exc).strip()
-    message = message.replace("ERROR: ", "")
+def _clean_error_text(raw: str) -> str:
+    """去掉 yt-dlp 錯誤訊息的前綴與冗長的補充說明。"""
+    message = raw.strip().replace("ERROR: ", "").strip()
     for marker in (";", " Please report", "\n"):
         if marker in message:
-            message = message.split(marker)[0]
-    return message.strip()[:200]
+            head = message.split(marker)[0].strip()
+            if head:  # 切完若整句沒了就保留原文，別留下一片空白
+                message = head
+    return message[:200]
+
+
+def _short_error(exc: Exception, logger: _CollectingLogger | None = None) -> str:
+    """把錯誤壓成一行；確保永遠有內容可顯示。
+
+    某些情況下例外本身沒有訊息（yt-dlp 已經把細節送去 logger 了），此時改用
+    logger 收到的最後一則錯誤，再不然至少報出例外型別。
+    """
+    message = _clean_error_text(str(exc))
+    if not message and logger is not None and logger.errors:
+        message = _clean_error_text(logger.errors[-1])
+    return message or f"{type(exc).__name__}（yt-dlp 未提供詳細訊息，可加 -v 看完整輸出）"

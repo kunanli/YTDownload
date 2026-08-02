@@ -2,7 +2,8 @@ from pathlib import Path
 
 from ytmusic.config import Config
 from ytmusic.downloader import (
-    Downloader, Track, _final_path, _parse_rate, _rename_from_meta, _unique_path, _walk,
+    Downloader, Track, _CollectingLogger, _final_path, _parse_rate, _rename_from_meta,
+    _short_error, _unique_path, _walk,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -222,6 +223,53 @@ class TestUniquePath:
         (tmp_path / "a.mp3").touch()
         (tmp_path / "a (2).mp3").touch()
         assert _unique_path(tmp_path / "a.mp3").name == "a (3).mp3"
+
+
+class TestShortError:
+    def test_strips_prefix_and_trailing_noise(self):
+        exc = Exception("ERROR: [youtube] abc: Video unavailable; some detail")
+        assert _short_error(exc) == "[youtube] abc: Video unavailable"
+
+    def test_keeps_message_when_split_would_empty_it(self):
+        # 開頭就是分隔符時，切完會變空字串——必須保留原文而不是留下空白
+        assert _short_error(Exception("; unexpected")) == "; unexpected"
+
+    def test_falls_back_to_logger_when_exception_has_no_message(self):
+        logger = _CollectingLogger()
+        logger.error("ERROR: [youtube] abc: Sign in to confirm you're not a bot")
+        message = _short_error(Exception(""), logger)
+        assert "Sign in to confirm" in message
+
+    def test_never_returns_empty(self):
+        message = _short_error(ValueError(""))
+        assert message
+        assert "ValueError" in message
+
+    def test_truncates_very_long_messages(self):
+        assert len(_short_error(Exception("x" * 500))) == 200
+
+
+class TestVerbose:
+    def test_quiet_by_default(self, tmp_path):
+        opts = Downloader(Config(output_dir=tmp_path))._base_opts()
+        assert opts["quiet"] is True
+        assert opts["verbose"] is False
+
+    def test_verbose_unmutes_yt_dlp(self, tmp_path):
+        opts = Downloader(Config(output_dir=tmp_path), verbose=True)._base_opts()
+        assert opts["quiet"] is False
+        assert opts["no_warnings"] is False
+        assert opts["verbose"] is True
+
+    def test_verbose_leaves_logger_unattached(self, tmp_path):
+        downloader = Downloader(Config(output_dir=tmp_path), verbose=True)
+        opts = downloader._download_opts(Track("a", "u", "t"), _CollectingLogger())
+        assert "logger" not in opts
+
+    def test_logger_attached_when_quiet(self, tmp_path):
+        downloader = Downloader(Config(output_dir=tmp_path))
+        opts = downloader._download_opts(Track("a", "u", "t"), _CollectingLogger())
+        assert "logger" in opts
 
 
 class TestPreflight:
