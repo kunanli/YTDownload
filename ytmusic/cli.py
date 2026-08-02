@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import shutil
 import sys
 from dataclasses import fields
 from pathlib import Path
@@ -12,6 +13,8 @@ from .config import AUDIO_FORMATS, QUALITIES, Config, coerce_value
 from .downloader import DownloadAborted, Downloader, Result, Track
 from .history import History, default_history_path
 from .progress import ProgressReporter
+from .search import SelectionError, format_results, parse_selection
+from .subscriptions import SubscriptionError, Subscriptions
 from .utils import classify_url, human_size, is_radio_playlist
 
 VIDEO_QUALITIES = ("best", "2160", "1440", "1080", "720", "480", "360")
@@ -45,6 +48,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
     _add_download_parser(sub)
+    _add_search_parser(sub)
+    _add_sync_parser(sub)
     _add_history_parser(sub)
     _add_config_parser(sub)
     return parser
@@ -60,6 +65,14 @@ def _add_download_parser(sub) -> None:
                    help="網址同時含播放清單時，只下載該首")
     p.add_argument("--playlist", action="store_true",
                    help="網址同時含播放清單時，下載整張清單")
+    _add_download_options(p)
+    p.set_defaults(func=cmd_download)
+
+
+def _add_download_options(p) -> None:
+    """download / search / sync 共用的下載選項。"""
+    p.add_argument("--dry-run", action="store_true",
+                   help="只列出將要下載的曲目，不實際下載")
     p.add_argument("--video", nargs="?", const="best", choices=VIDEO_QUALITIES,
                    metavar="RES",
                    help="下載影片而非只要音訊；可指定畫質上限，例如 --video 1080")
@@ -78,7 +91,6 @@ def _add_download_parser(sub) -> None:
                    help="不依標籤重新命名，直接沿用 yt-dlp 檔名樣板的結果")
     p.add_argument("--no-history", action="store_true", help="這次不讀也不寫下載歷史")
     p.add_argument("--force", action="store_true", help="忽略下載歷史，重新下載")
-    p.add_argument("--dry-run", action="store_true", help="只列出將要下載的曲目，不實際下載")
     p.add_argument("--template", metavar="TMPL", help="yt-dlp 檔名樣板，需包含 %%(ext)s")
     p.add_argument("--cookies", metavar="FILE", help="cookies.txt 路徑（用於年齡限制／會員內容）")
     p.add_argument("--cookies-from-browser", metavar="BROWSER",
@@ -88,7 +100,58 @@ def _add_download_parser(sub) -> None:
     p.add_argument("--no-progress", action="store_true", help="關閉進度列，只輸出純文字")
     p.add_argument("-v", "--verbose", action="store_true",
                    help="印出 yt-dlp 的完整診斷輸出，用來查明失敗原因")
-    p.set_defaults(func=cmd_download)
+
+
+def _add_search_parser(sub) -> None:
+    p = sub.add_parser(
+        "search", aliases=["s"], help="用歌名搜尋並挑選要下載的曲目",
+        description="輸入關鍵字搜尋 YouTube，列出結果讓你挑，選好就直接下載。",
+    )
+    p.add_argument("query", nargs="+", metavar="關鍵字", help="歌名、歌手，或兩者一起")
+    p.add_argument("-n", "--limit", type=int, default=8, metavar="N",
+                   help="顯示幾筆結果（預設 8，上限 50）")
+    p.add_argument("--first", action="store_true",
+                   help="不詢問，直接下載第一筆（適合寫在腳本裡）")
+    _add_download_options(p)
+    p.set_defaults(func=cmd_search, single=True, playlist=False)
+
+
+def _add_sync_parser(sub) -> None:
+    p = sub.add_parser(
+        "sync", help="追蹤播放清單，之後一行指令補上新增的曲目",
+        description="把播放清單加進追蹤名單，之後跑 ytmusic sync 就會只下載新增的曲目。",
+    )
+    ssub = p.add_subparsers(dest="action", metavar="<action>")
+
+    add = ssub.add_parser("add", help="加入一張要追蹤的播放清單")
+    add.add_argument("url", metavar="URL")
+    add.add_argument("--name", metavar="NAME", help="自訂名稱，省略則自動命名")
+    add.add_argument("-o", "--output", metavar="DIR", help="這張清單專用的輸出資料夾")
+    add.add_argument("--video", nargs="?", const="best", choices=VIDEO_QUALITIES,
+                     metavar="RES", help="這張清單固定下載影片")
+    add.set_defaults(func=cmd_sync_add)
+
+    listing = ssub.add_parser("list", help="列出追蹤中的播放清單")
+    listing.set_defaults(func=cmd_sync_list)
+
+    remove = ssub.add_parser("remove", help="取消追蹤")
+    remove.add_argument("name", metavar="NAME")
+    remove.set_defaults(func=cmd_sync_remove)
+
+    rename = ssub.add_parser("rename", help="改名")
+    rename.add_argument("old", metavar="舊名稱")
+    rename.add_argument("new", metavar="新名稱")
+    rename.set_defaults(func=cmd_sync_rename)
+
+    run = ssub.add_parser("run", help="同步（預設動作，可省略）")
+    run.add_argument("names", nargs="*", metavar="NAME",
+                     help="只同步指定的清單，省略則全部")
+    _add_download_options(run)
+    run.set_defaults(func=cmd_sync_run)
+
+    # 直接打 `ytmusic sync` 就等於 `ytmusic sync run`
+    _add_download_options(p)
+    p.set_defaults(func=cmd_sync_run, action="run", names=[])
 
 
 def _add_history_parser(sub) -> None:
@@ -178,8 +241,11 @@ def cmd_download(args: argparse.Namespace) -> int:
     single = _resolve_single(args)
     if single is None:
         return EXIT_USAGE
+    return _download_urls(args.urls, args, single=single)
 
-    config = Config.load().merged(
+
+def _build_config(args: argparse.Namespace) -> Config:
+    return Config.load().merged(
         output_dir=args.output,
         audio_format=args.audio_format,
         quality=args.quality,
@@ -196,6 +262,16 @@ def cmd_download(args: argparse.Namespace) -> int:
         proxy=args.proxy,
         rate_limit=args.rate_limit,
     )
+
+
+def _download_urls(urls: list[str], args: argparse.Namespace, *,
+                   single: bool, label: str | None = None,
+                   stats: dict | None = None) -> int:
+    """download / search / sync 共用的下載流程。
+
+    ``stats`` 若有給，會被填入 ``total`` / ``downloaded``，供 sync 記錄用。
+    """
+    config = _build_config(args)
 
     try:
         _require_yt_dlp()
@@ -220,13 +296,16 @@ def cmd_download(args: argparse.Namespace) -> int:
         return EXIT_PRECONDITION
 
     try:
-        print("正在解析網址…", file=sys.stderr)
-        tracks = downloader.expand(args.urls, single=single)
+        print(f"正在解析{label or '網址'}…", file=sys.stderr)
+        tracks = downloader.expand(urls, single=single)
         if not tracks:
             print("沒有找到可下載的曲目。", file=sys.stderr)
             return EXIT_PRECONDITION
 
         pending, skipped = downloader.filter_new(tracks, force=args.force)
+        if stats is not None:
+            stats["total"] = len(tracks)
+            stats["downloaded"] = len(pending)
         _print_plan(config, tracks, pending, skipped, video=args.video)
 
         if args.dry_run:
@@ -297,6 +376,153 @@ def _summarize(results: list[Result], config: Config) -> int:
     if failed:
         return EXIT_PARTIAL if ok else EXIT_FAILED
     return EXIT_OK
+
+
+# --------------------------------------------------------------------------
+# search
+# --------------------------------------------------------------------------
+
+def cmd_search(args: argparse.Namespace) -> int:
+    query = " ".join(args.query).strip()
+    if not query:
+        print("請給我要搜尋的關鍵字。", file=sys.stderr)
+        return EXIT_USAGE
+
+    try:
+        _require_yt_dlp()
+    except DownloadAborted as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    config = _build_config(args)
+    downloader = Downloader(config, verbose=args.verbose)
+    print(f"搜尋「{query}」…", file=sys.stderr)
+    try:
+        results = downloader.search(query, limit=args.limit)
+    except DownloadAborted as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    if not results:
+        print("找不到結果，換個關鍵字試試。", file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    width = max(60, shutil.get_terminal_size((100, 24)).columns - 2)
+    print()
+    for line in format_results(results, width=width):
+        print(line)
+    print("\n  ♪ = 官方音源（音質通常最好）")
+
+    picked = _prompt_selection(results, first_only=args.first)
+    if picked is None:
+        return EXIT_USAGE
+    if not picked:
+        print("已取消。", file=sys.stderr)
+        return EXIT_OK
+
+    urls = [results[i].url for i in picked]
+    return _download_urls(urls, args, single=True, label="選取的曲目")
+
+
+def _prompt_selection(results, *, first_only: bool) -> list[int] | None:
+    """讓使用者挑選搜尋結果；回傳 None 代表輸入有誤，空清單代表取消。"""
+    if first_only or not sys.stdin.isatty():
+        if not first_only:
+            print("\n（非互動環境，自動選第 1 筆）", file=sys.stderr)
+        return [0]
+
+    prompt = f"\n要下載哪幾首？[1-{len(results)}／逗號分隔／a 全部／Enter 第一首／q 取消] "
+    try:
+        answer = input(prompt)
+    except EOFError:
+        return [0]
+    try:
+        return parse_selection(answer, len(results))
+    except SelectionError as exc:
+        print(str(exc), file=sys.stderr)
+        return None
+
+
+# --------------------------------------------------------------------------
+# sync
+# --------------------------------------------------------------------------
+
+def cmd_sync_add(args: argparse.Namespace) -> int:
+    store = Subscriptions()
+    try:
+        item = store.add(args.url, args.name, output_dir=args.output, video=args.video)
+    except SubscriptionError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_USAGE
+    print(f"已加入追蹤：{item.name}")
+    print(f"  {item.url}")
+    print("\n之後只要跑這行就會補上新增的曲目：\n  ytmusic sync")
+    return EXIT_OK
+
+
+def cmd_sync_list(args: argparse.Namespace) -> int:
+    store = Subscriptions()
+    items = store.list()
+    if not items:
+        print("還沒有追蹤任何播放清單。\n\n  ytmusic sync add \"<播放清單網址>\"")
+        return EXIT_OK
+    for item in items:
+        when = item.last_sync[:10] if item.last_sync else "從未同步"
+        extra = f"　影片 {item.video}" if item.video else ""
+        print(f"  {item.name:<12} {when:<12} 上次 {item.last_count:>3} 首{extra}")
+        print(f"  {'':<12} {item.url}")
+    print(f"\n共 {len(items)} 張（{Subscriptions().path}）")
+    return EXIT_OK
+
+
+def cmd_sync_remove(args: argparse.Namespace) -> int:
+    store = Subscriptions()
+    if not store.remove(args.name):
+        print(f"找不到訂閱：{args.name}", file=sys.stderr)
+        return EXIT_PRECONDITION
+    print(f"已取消追蹤：{args.name}")
+    return EXIT_OK
+
+
+def cmd_sync_rename(args: argparse.Namespace) -> int:
+    store = Subscriptions()
+    try:
+        item = store.rename(args.old, args.new)
+    except SubscriptionError as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_USAGE
+    print(f"已改名為：{item.name}")
+    return EXIT_OK
+
+
+def cmd_sync_run(args: argparse.Namespace) -> int:
+    store = Subscriptions()
+    items = store.list()
+    if args.names:
+        wanted = {n.lower() for n in args.names}
+        items = [i for i in items if i.name.lower() in wanted]
+        missing = wanted - {i.name.lower() for i in items}
+        for name in sorted(missing):
+            print(f"找不到訂閱：{name}", file=sys.stderr)
+    if not items:
+        print("沒有要同步的播放清單。\n\n  ytmusic sync add \"<播放清單網址>\"",
+              file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    worst = EXIT_OK
+    for index, item in enumerate(items, start=1):
+        print(f"\n=== [{index}/{len(items)}] {item.name} ===", file=sys.stderr)
+        # 訂閱時綁定的設定優先，命令列臨時指定的可覆蓋。
+        scoped = argparse.Namespace(**vars(args))
+        scoped.output = args.output or item.output_dir
+        scoped.video = args.video or item.video
+        stats: dict = {}
+        code = _download_urls([item.url], scoped, single=False, label=item.name,
+                              stats=stats)
+        if code == EXIT_OK and not args.dry_run and "total" in stats:
+            store.mark_synced(item.name, stats["total"])
+        worst = max(worst, code)
+    return worst
 
 
 _COOKIE_HINT_MARKERS = (

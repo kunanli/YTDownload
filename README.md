@@ -19,11 +19,37 @@
 
 ---
 
-## 懶人包：三個最常用的指令
+## 最簡單的用法：雙擊 `下載.bat`
 
-已經裝好了的話，你要的大概就是這三行其中一行：
+裝好之後，**不想打指令的話，直接在資料夾裡雙擊 `下載.bat`**（Mac 是 `下載.command`），
+會跳出選單：
+
+```
+  ============================================
+     YouTube 音樂下載器
+  ============================================
+
+    [1] 下載音樂（貼網址）
+    [2] 用歌名搜尋
+    [3] 下載影片（貼網址）
+    [4] 同步追蹤的播放清單
+    [5] 看下載過什麼
+
+    [0] 離開
+
+  請選擇（直接按 Enter = 1）:
+```
+
+貼上網址、按 Enter，就開始下載。完全不用碰 PowerShell。
+
+## 懶人包：四個最常用的指令
+
+想打指令的話，你要的大概就是這幾行其中一行：
 
 ```powershell
+# 不知道網址？直接用歌名搜尋
+python -m ytmusic search "告白氣球"
+
 # 下載一首歌（MP3）
 python -m ytmusic dl "網址"
 
@@ -42,9 +68,11 @@ python -m ytmusic dl "網址" --video 1080
 
 - [第一部分：安裝](#第一部分安裝只需做一次) — Windows / macOS，只需做一次
 - [第二部分：開始下載](#第二部分開始下載)
+  - [**用歌名搜尋**](#用歌名搜尋)
   - [下載一首歌](#下載一首歌)
   - [下載整張播放清單](#下載整張播放清單)
   - [**下載影片**](#下載影片)
+  - [**追蹤播放清單，自動補新歌**](#追蹤播放清單自動補新歌)
   - [檔案存到哪裡](#檔案存到哪裡)
 - [第三部分：遇到問題怎麼辦](#第三部分遇到問題怎麼辦)
 - [第四部分：完整選項](#第四部分完整選項進階)
@@ -168,6 +196,47 @@ python -m ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 > python -m ytmusic dl https://...       ❌ 錯，網址有 & 的話會壞掉
 > ```
 
+## 用歌名搜尋
+
+**不知道網址也沒關係**，直接打歌名：
+
+```powershell
+python -m ytmusic search "告白氣球 周杰倫"
+```
+
+會列出結果讓你挑：
+
+```
+  1. ♪ 周杰倫 - 告白氣球                          03:35  周杰倫
+  2.   周杰倫 Jay Chou《告白氣球》Official MV      03:36  周杰倫 Jay Chou
+  3.   告白氣球-周杰倫（周二珂 cover）             03:33  老司機
+
+  ♪ = 官方音源（音質通常最好）
+
+要下載哪幾首？[1-8／逗號分隔／a 全部／Enter 第一首／q 取消]
+```
+
+輸入方式很彈性：
+
+| 你打 | 意思 |
+| --- | --- |
+| 直接按 Enter | 下載第 1 首 |
+| `3` | 下載第 3 首 |
+| `1,3,5` | 下載第 1、3、5 首 |
+| `2-4` | 下載第 2 到 4 首 |
+| `a` | 全部下載 |
+| `q` | 取消 |
+
+其他選項：
+
+```powershell
+python -m ytmusic search "歌名" -n 20      # 顯示 20 筆（預設 8）
+python -m ytmusic search "歌名" --first    # 不問，直接抓第一筆
+python -m ytmusic search "歌名" --video    # 搜到的直接下載成影片
+```
+
+> 💡 有 ♪ 記號的是 YouTube Music 的官方音源，通常音質最好、也不會有片頭片尾。
+
 ## 下載一首歌
 
 在瀏覽器複製網址，然後：
@@ -251,6 +320,46 @@ python -m ytmusic dl "影片網址" --video 1080
 ```powershell
 python -m ytmusic dl "播放清單網址" --playlist --video 720
 ```
+
+## 追蹤播放清單，自動補新歌
+
+如果有一張清單你會一直往裡面加歌，可以把它「訂閱」起來：
+
+```powershell
+python -m ytmusic sync add "播放清單網址" --name 我的最愛
+```
+
+之後**每次只要跑這一行**，就會自動補上新加進去的歌（已經有的不會重下）：
+
+```powershell
+python -m ytmusic sync
+```
+
+```
+=== [1/1] 我的最愛 ===
+共 93 首；待下載 3 首，略過 90 首（已下載過）
+✔ [1/3] YOASOBI - アイドル
+✔ [2/3] Creepy Nuts - Bling-Bang-Bang-Born
+✔ [3/3] 周杰倫 - 告白氣球
+```
+
+管理訂閱：
+
+```powershell
+python -m ytmusic sync list              # 看追蹤了哪些
+python -m ytmusic sync remove 我的最愛   # 取消追蹤
+python -m ytmusic sync rename 舊名 新名  # 改名
+python -m ytmusic sync --dry-run         # 只看會下載什麼，不真的下載
+```
+
+每張清單可以有自己的資料夾和格式，加進去的時候設定就好：
+
+```powershell
+python -m ytmusic sync add "網址" --name 日文歌 -o "D:\音樂\日文"
+python -m ytmusic sync add "網址" --name MV收藏 --video 1080
+```
+
+> 💡 訂閱資料存在 `subscriptions.json`，是純文字檔，你可以直接打開來看或改。
 
 ## 檔案存到哪裡？
 

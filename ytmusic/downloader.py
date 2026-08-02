@@ -10,6 +10,7 @@ from pathlib import Path
 from .config import Config
 from .history import History
 from .progress import ProgressReporter
+from .search import SearchResult, parse_results
 from .tagger import (
     TaggingError, TrackMeta, apply_tags, build_metadata, fetch_cover,
     pick_thumbnail_url,
@@ -140,6 +141,24 @@ class Downloader:
                     seen.add(track.video_id)
                     tracks.append(track)
         return tracks
+
+    def search(self, query: str, limit: int = 8) -> list[SearchResult]:
+        """用關鍵字搜尋 YouTube，回傳候選曲目（不下載）。"""
+        from yt_dlp import YoutubeDL
+
+        limit = max(1, min(limit, 50))
+        logger = _CollectingLogger()
+        opts = self._base_opts()
+        opts.update({"extract_flat": True, "skip_download": True})
+        if not self.verbose:
+            opts["logger"] = logger
+
+        with YoutubeDL(opts) as ydl:
+            try:
+                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+            except Exception as exc:
+                raise DownloadAborted(f"搜尋失敗：{_short_error(exc, logger)}") from exc
+        return parse_results(info)
 
     def filter_new(self, tracks: list[Track], force: bool = False) -> tuple[list[Track], list[Track]]:
         """依下載歷史把曲目分成「要下載」與「已下載可略過」兩堆。"""
