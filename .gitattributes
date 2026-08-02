@@ -1,0 +1,6 @@
+# batch 檔在 Windows 上必須是 CRLF，否則 cmd.exe 的 goto 標籤可能失效
+*.bat text eol=crlf
+
+# shell 腳本必須維持 LF
+*.command text eol=lf
+*.sh text eol=lf

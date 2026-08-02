@@ -47,12 +47,27 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("-V", "--version", action="version", version=f"ytmusic {__version__}")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
 
+    _add_menu_parser(sub)
     _add_download_parser(sub)
     _add_search_parser(sub)
     _add_sync_parser(sub)
     _add_history_parser(sub)
     _add_config_parser(sub)
     return parser
+
+
+def _add_menu_parser(sub) -> None:
+    p = sub.add_parser(
+        "menu", help="開啟互動式選單（不用記指令）",
+        description="用選單操作，不需要記任何指令。雙擊啟動檔開的就是這個。",
+    )
+    p.set_defaults(func=cmd_menu)
+
+
+def cmd_menu(args: argparse.Namespace) -> int:
+    from .menu import run_menu
+
+    return run_menu()
 
 
 def _add_download_parser(sub) -> None:
