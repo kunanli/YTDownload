@@ -5,6 +5,7 @@ from ytmusic.downloader import (
     Downloader, Track, _CollectingLogger, _clean_error_text, _fallback_url,
     _final_path, _parse_rate, _rename_from_meta, _short_error, _unique_path,
     _walk, _is_network_error, _extract_over_ipv4, NETWORK_HINT,
+    CURL_CFFI_SPEC, IMPERSONATE_HINT,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -466,3 +467,103 @@ class TestIpv4Retry:
         opts = {"quiet": True}
         _extract_over_ipv4(opts, "https://x/y")
         assert "source_address" not in opts
+
+
+class TestImpersonateHint:
+    """curl_cffi 的版本區間是 yt-dlp 寫死的，提示裡不能漏掉。"""
+
+    def test_pins_the_version_range(self):
+        # 實際踩過：裝了 0.16 之後 yt-dlp 只說「target 不可用」，完全不提版本
+        assert CURL_CFFI_SPEC == "curl_cffi>=0.10,<0.16"
+        assert CURL_CFFI_SPEC in IMPERSONATE_HINT
+
+    def test_uses_python_m_pip(self):
+        # 跟 playwright 同一個坑：Windows 上 pip 裝的執行檔不在 PATH
+        assert "python -m pip install" in IMPERSONATE_HINT
+
+    def test_explains_why_it_helps(self):
+        assert "TLS" in IMPERSONATE_HINT
+
+
+class TestNetworkRetryOrder:
+    """兩招治的是不同病因，順序有意義：先免安裝的，再要裝東西的。"""
+
+    def _downloader(self, monkeypatch, *, available, ipv4, impersonating):
+        import ytmusic.downloader as mod
+        from ytmusic.config import Config
+
+        monkeypatch.setattr(mod, "impersonation_available", lambda: available)
+        monkeypatch.setattr(mod, "_extract_over_ipv4", ipv4)
+        monkeypatch.setattr(mod, "_extract_impersonating", impersonating)
+        downloader = mod.Downloader(Config())
+        downloader._log = lambda message: None
+        return downloader
+
+    @staticmethod
+    def _ssl_error(*args, **kwargs):
+        raise Exception("[SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred")
+
+    def test_tries_ipv4_first_then_impersonation(self, monkeypatch):
+        order = []
+        downloader = self._downloader(
+            monkeypatch, available=True,
+            ipv4=lambda o, u: (order.append("ipv4"), self._ssl_error())[0],
+            impersonating=lambda o, u, t="chrome": (order.append("impersonate"),
+                                                    {"id": "ok"})[1],
+        )
+        info, _ = downloader._retry_network({}, "https://x/y", Exception("[SSL: x]"))
+        assert order == ["ipv4", "impersonate"]
+        assert info == {"id": "ok"}
+
+    def test_skips_impersonation_when_unavailable(self, monkeypatch):
+        order = []
+        downloader = self._downloader(
+            monkeypatch, available=False,
+            ipv4=lambda o, u: (order.append("ipv4"), self._ssl_error())[0],
+            impersonating=lambda o, u, t="chrome": order.append("impersonate"),
+        )
+        info, _ = downloader._retry_network({}, "https://x/y", Exception("[SSL: x]"))
+        assert order == ["ipv4"]
+        assert info is None
+
+    def test_stops_when_the_error_stops_being_a_network_one(self, monkeypatch):
+        # 換了條件之後變成「影片不存在」，再重試沒有意義
+        order = []
+
+        def ipv4(opts, url):
+            order.append("ipv4")
+            raise Exception("Video unavailable")
+
+        downloader = self._downloader(
+            monkeypatch, available=True, ipv4=ipv4,
+            impersonating=lambda o, u, t="chrome": order.append("impersonate"),
+        )
+        info, failure = downloader._retry_network({}, "https://x/y", Exception("[SSL: x]"))
+        assert order == ["ipv4"]
+        assert info is None
+        assert "Video unavailable" in str(failure)
+
+    def test_does_not_re_impersonate_when_user_already_asked_for_it(self, monkeypatch):
+        order = []
+        downloader = self._downloader(
+            monkeypatch, available=True,
+            ipv4=lambda o, u: (order.append("ipv4"), self._ssl_error())[0],
+            impersonating=lambda o, u, t="chrome": order.append("impersonate"),
+        )
+        downloader.impersonate = "chrome"
+        downloader._retry_network({}, "https://x/y", Exception("[SSL: x]"))
+        assert order == ["ipv4"]
+
+
+class TestImpersonateOption:
+    def test_config_value_reaches_ytdlp_options(self, monkeypatch):
+        import ytmusic.downloader as mod
+        from ytmusic.config import Config
+
+        monkeypatch.setattr(mod, "impersonate_target", lambda name: f"<{name}>")
+        assert mod.Downloader(Config(impersonate="firefox"))._base_opts()["impersonate"] == "<firefox>"
+
+    def test_absent_by_default(self):
+        from ytmusic.config import Config
+
+        assert "impersonate" not in Downloader(Config())._base_opts()

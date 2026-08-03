@@ -49,6 +49,8 @@ class Config:
     cookies_from_browser: str | None = None
     proxy: str | None = None
     rate_limit: str | None = None
+    # 假扮瀏覽器的 TLS 指紋（需要 curl_cffi），例如 chrome、firefox。
+    impersonate: str | None = None
 
     def __post_init__(self) -> None:
         self.output_dir = Path(self.output_dir).expanduser() if self.output_dir else default_output_dir()
@@ -169,6 +171,7 @@ def coerce_value(field_name: str, raw: str):
         return int(raw)
     if lowered in {"none", "null", ""} and field_name in {
         "cookies_file", "cookies_from_browser", "proxy", "rate_limit",
+        "impersonate",
     }:
         return None
     return raw

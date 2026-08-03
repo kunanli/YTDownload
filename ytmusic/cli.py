@@ -123,6 +123,8 @@ def _add_download_options(p) -> None:
     p.add_argument("--cookies-from-browser", metavar="BROWSER",
                    help="從瀏覽器讀取 cookies，例如 chrome、firefox、edge")
     p.add_argument("--proxy", metavar="URL", help="HTTP/SOCKS 代理伺服器")
+    p.add_argument("--impersonate", nargs="?", const="chrome", metavar="瀏覽器",
+                   help="假扮成瀏覽器的 TLS 指紋（需要 curl_cffi），用於連線被無故切斷的站台")
     p.add_argument("--rate-limit", metavar="RATE", help="限速，例如 500K、1.5M")
     p.add_argument("--no-progress", action="store_true", help="關閉進度列，只輸出純文字")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -477,6 +479,7 @@ def _build_config(args: argparse.Namespace) -> Config:
         cookies_file=args.cookies,
         cookies_from_browser=args.cookies_from_browser,
         proxy=args.proxy,
+        impersonate=getattr(args, "impersonate", None),
         rate_limit=args.rate_limit,
     )
 

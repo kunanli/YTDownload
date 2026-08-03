@@ -2,6 +2,36 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.13.0
+
+### 新增
+
+- **假扮瀏覽器的 TLS 指紋**（yt-dlp 的 impersonation，需要 `curl_cffi`）：
+  - 連線被切斷且 IPv4 也救不回來時**自動再試一次**
+  - `--impersonate [瀏覽器]` 可從一開始就用，也能 `config set impersonate chrome` 固定
+  - 沒裝 `curl_cffi` 時，失敗訊息會附上安裝方式
+- 選用相依 `pip install "ytmusic[impersonate]"`
+
+### 說明
+
+使用者換了一個 LinkedIn 短網址，IPv4 重試也失敗，錯誤仍是
+`[SSL: UNEXPECTED_EOF_WHILE_READING]`。但他的 YouTube 與微信視頻號都正常，
+所以 Python 的 TLS 本身沒問題——是 **LinkedIn 那邊**把連線切斷。
+
+這正是 TLS 指紋阻擋的典型症狀：對方依握手特徵判斷來的是不是瀏覽器，
+不像就直接斷線。開發環境看不到這個現象，因為連外會經過一層會終止 TLS 的代理，
+對方看到的是代理的指紋而不是 Python 的。
+
+**注意 `curl_cffi` 的版本區間**：yt-dlp 只接受 `0.10 ≤ 版本 < 0.16`，
+裝到 0.16 只會得到「Impersonate target 不可用」而完全不提版本——
+安裝提示因此一律帶上範圍。
+
+### 未驗證
+
+開發環境無法重現使用者的斷線（代理擋在中間），也無法在這裡實測
+impersonation 是否解決他的問題。已驗的是：重試順序、可用性偵測、
+選項傳遞、以及裝上 `curl_cffi 0.15` 後 yt-dlp 確實列得出 impersonate 目標。
+
 ## 1.12.0
 
 ### 新增

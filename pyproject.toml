@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ytmusic"
-version = "1.12.0"
+version = "1.13.0"
 description = "影音下載器：支援 YouTube、Bilibili、Vimeo、微信視頻號等 1700 多個網站，可下載音訊或影片、寫入標籤與封面、抓歌詞字幕，並記錄下載歷史"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -17,6 +17,8 @@ dependencies = [
 [project.optional-dependencies]
 cover = ["Pillow>=10.0"]
 wechat = ["playwright>=1.40"]
+# yt-dlp 對 curl_cffi 的版本區間是寫死的，裝太新只會說「target 不可用」。
+impersonate = ["curl_cffi>=0.10,<0.16"]
 dev = ["pytest>=7.0"]
 
 [project.scripts]

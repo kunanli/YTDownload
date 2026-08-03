@@ -91,6 +91,8 @@ class Downloader:
         self.video = video
         self.subs = subs
         self.lyrics = lyrics
+        # 使用者明確指定要假扮瀏覽器時，一開始就用；沒指定則只在連線失敗後才試。
+        self.impersonate = config.impersonate
         self._stop = threading.Event()
 
     # -- 前置檢查 ---------------------------------------------------------
@@ -109,6 +111,33 @@ class Downloader:
 
     def cancel(self) -> None:
         self._stop.set()
+
+    def _retry_network(self, opts: dict, url: str,
+                       failure: Exception) -> tuple[dict | None, Exception]:
+        """連線被切斷時，依序換條件重試。回傳 (結果, 最後一次的錯誤)。
+
+        兩招針對的是不同病因，所以先後有別：IPv4 治的是路由半通不通，
+        假扮瀏覽器治的是對方看 TLS 指紋擋人——後者要裝東西，所以擺後面。
+        """
+        attempts: list[tuple[str, callable]] = [
+            ("改用 IPv4", lambda: _extract_over_ipv4(opts, url)),
+        ]
+        if not self.impersonate and impersonation_available():
+            attempts.append(("假扮成瀏覽器的 TLS 指紋",
+                             lambda: _extract_impersonating(opts, url)))
+
+        for label, attempt in attempts:
+            self._log(f"  連線被中斷，{label}，再試一次…")
+            try:
+                info = attempt()
+            except Exception as exc:
+                failure = exc
+                if not _is_network_error(exc):
+                    break  # 換了條件之後變成別的錯，再重試也沒意義
+                continue
+            if info is not None:
+                return info, failure
+        return None, failure
 
     # -- 展開網址 ---------------------------------------------------------
 
@@ -148,17 +177,15 @@ class Downloader:
                             info = ydl.extract_info(fallback, download=False)
                         except Exception as retry_exc:
                             failure = retry_exc
-                    # 連線被中途切斷多半跟 IPv6 或中間設備有關，改走 IPv4 常常就過了。
                     if info is None and _is_network_error(failure):
-                        self._log("  連線被中斷，改用 IPv4 再試一次…")
-                        try:
-                            info = _extract_over_ipv4(opts, fallback or url)
-                        except Exception as retry_exc:
-                            failure = retry_exc
+                        info, failure = self._retry_network(opts, fallback or url,
+                                                            failure)
                     if info is None:
                         self._log(f"✖ 無法讀取 {url}：{_short_error(failure, logger)}")
                         if _is_network_error(failure):
                             self._log(NETWORK_HINT)
+                            if not self.impersonate and not impersonation_available():
+                                self._log(IMPERSONATE_HINT)
                         continue
                 if info is None:
                     self._log(f"✖ 無法讀取 {url}")
@@ -390,6 +417,8 @@ class Downloader:
         }
         if self.config.proxy:
             opts["proxy"] = self.config.proxy
+        if self.impersonate:
+            opts["impersonate"] = impersonate_target(self.impersonate)
         if self.config.cookies_file:
             opts["cookiefile"] = str(Path(self.config.cookies_file).expanduser())
         if self.config.cookies_from_browser:
@@ -707,6 +736,57 @@ def _is_network_error(exc: BaseException) -> bool:
 
     message = strip_ansi(str(exc)).lower()
     return any(marker in message for marker in _NETWORK_MARKERS)
+
+
+# curl_cffi 的版本區間是 yt-dlp 寫死的：不在區間內時 yt-dlp 只會說「target
+# 不可用」，完全不提版本，很難查。所以提示一定要把版本範圍寫進去。
+CURL_CFFI_SPEC = "curl_cffi>=0.10,<0.16"
+
+IMPERSONATE_HINT = f"""  想再試一招：**假扮成瀏覽器的 TLS 指紋**。
+
+  有些站台（LinkedIn 是其中之一）會依 TLS 握手的特徵判斷對方是不是瀏覽器，
+  不像就直接把連線切斷——症狀正是 UNEXPECTED_EOF / Connection reset。
+  瀏覽器打得開、程式打不開，多半就是這個。
+
+  安裝（版本範圍不能省，裝到太新的 yt-dlp 會說「target 不可用」）：
+    python -m pip install "{CURL_CFFI_SPEC}"
+
+  裝好後重跑就會自動用上，也可以自己指定：
+    python -m ytmusic dl "網址" --impersonate chrome"""
+
+
+def impersonate_target(name: str = "chrome"):
+    """把 `chrome`、`chrome-136` 這種字串轉成 yt-dlp 的 ImpersonateTarget。"""
+    try:
+        from yt_dlp.networking.impersonate import ImpersonateTarget
+
+        return ImpersonateTarget.from_str(name)
+    except Exception:
+        return None
+
+
+def impersonation_available() -> bool:
+    """有沒有裝好可用的 curl_cffi。
+
+    只看 `import curl_cffi` 不夠——yt-dlp 對版本有硬性區間，裝了太新的一樣不能用。
+    """
+    try:
+        from yt_dlp.networking._curlcffi import CurlCFFIRH  # noqa: F401
+        import curl_cffi
+
+        return "unsupported" not in getattr(curl_cffi, "_yt_dlp__version", "")
+    except Exception:
+        return False
+
+
+def _extract_impersonating(opts: dict, url: str, target: str = "chrome"):
+    """假扮瀏覽器的 TLS 指紋再解析一次。"""
+    from yt_dlp import YoutubeDL
+
+    retry_opts = dict(opts)
+    retry_opts["impersonate"] = impersonate_target(target)
+    with YoutubeDL(retry_opts) as ydl:
+        return ydl.extract_info(url, download=False)
 
 
 def _extract_over_ipv4(opts: dict, url: str):

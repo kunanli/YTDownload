@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.12.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.13.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -88,6 +88,7 @@
 | `無法讀取 <網址>：` 後面一片空白 | [1.10.0 修掉了，`git pull` 更新](#我想看到底出了什麼事) |
 | 微信視頻號「沒有回傳影片位址」 | [換個網路，或加 `--resolver`](#如果它說微信沒有回傳影片位址) |
 | `[SSL: UNEXPECTED_EOF_WHILE_READING]` | [連線被切斷，不是影片的問題](#ssl-連線被切斷) |
+| 只有 LinkedIn 連不上，其他站台正常 | [裝 curl_cffi 假扮瀏覽器指紋](#只有-linkedin-這樣那多半是-tls-指紋) |
 
 ---
 
