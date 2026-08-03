@@ -2,6 +2,26 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.9.0
+
+### 改名
+
+工具早已不只支援 YouTube，介面卻還寫著「YouTube 音樂下載器」：
+
+- 選單橫幅改成「影音下載器」，並列出 YouTube · Bilibili · Vimeo · 微信視頻號
+- 選單項目改成「下載音樂／影片（任何網站，貼網址）」
+- `--help` 的說明與範例改寫，涵蓋各站台與新指令
+- 套件說明同步更新
+
+套件名稱與指令維持 `ytmusic` 不變——改名會破壞既有安裝、指令習慣與說明文件，
+不值得。
+
+### 文件
+
+- 新增「LinkedIn 的影片網址怎麼複製」：右鍵的 Copy video address 被
+  LinkedIn 鎖成灰色，要改用貼文右上角 `•••` → Copy link to post，
+  或點時間戳開啟貼文專頁再複製網址列。Facebook 與 Instagram 同理
+
 ## 1.8.0
 
 ### 修正

@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.8.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.9.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -83,6 +83,7 @@
 | 「沒有字幕可轉成歌詞」 | [那支影片沒字幕，正常現象](#歌詞與字幕) |
 | 想看完整錯誤訊息 | [指令後面加 `-v`](#我想看到底出了什麼事) |
 | `'playwright' is not recognized` | [要用 `python -m playwright`](#微信視頻號) |
+| LinkedIn「Copy video address」是灰的 | [要複製貼文網址](#linkedin-的影片網址怎麼複製) |
 
 ---
 
@@ -93,14 +94,15 @@
 [`下載.command`](%E4%B8%8B%E8%BC%89.command)），會跳出選單：
 
 ```
-  ============================================
-     YouTube 音樂下載器
-  ============================================
+  ================================================
+     影音下載器
+     YouTube · Bilibili · Vimeo · 微信視頻號 …
+  ================================================
 
-    [1] 下載音樂（貼網址）
+    [1] 下載音樂（任何網站，貼網址）
     [2] 用歌名搜尋
     [3] 用歌手名稱找歌
-    [4] 下載影片（貼網址）
+    [4] 下載影片（任何網站，貼網址）
     [5] 下載微信視頻號（會開瀏覽器）
     [6] 同步追蹤的播放清單
     [7] 看下載過什麼
@@ -402,10 +404,37 @@ python -m ytmusic dl "https://www.instagram.com/reel/..." --cookies-from-browser
 | **Vimeo** | 直接可用。一般頁面要先換 OAuth token，某些網路環境會被回 `401 Unauthorized`，遇到時工具會**自動改用播放器網址重試**，你不用做任何事 |
 | **Facebook** | **公開**影片與 Reels 直接可用；私人貼文、社團內容要加 `--cookies-from-browser` |
 | **Instagram** | **幾乎都要登入**。沒帶 cookies 會看到「Instagram sent an empty media response」，加 `--cookies-from-browser chrome` 即可 |
-| **LinkedIn** | 多數貼文和 Learning 課程要登入，同樣加 `--cookies-from-browser` |
+| **LinkedIn** | 多數貼文和 Learning 課程要登入，同樣加 `--cookies-from-browser`；**要複製的是貼文網址，不是影片網址**，見下方 |
 
 需要登入的站台，記得**先把該瀏覽器完全關掉**再執行，詳見
 [「HTTP Error 403」或「需要登入」](#http-error-403或需要登入)。
+
+### LinkedIn 的影片網址怎麼複製
+
+**右鍵點影片沒有用** —— LinkedIn 把「Copy video address」鎖成灰色。
+你要的是**貼文網址**，不是影片元素的網址。
+
+兩個方法擇一：
+
+| 方法 | 怎麼做 |
+| --- | --- |
+| **A** | 點貼文右上角的 `•••` → **Copy link to post** |
+| **B** | 點作者名字下方的時間戳（例如 `1w`）→ 開啟該貼文專頁 → 複製網址列 |
+
+拿到的網址長這樣：
+
+```
+https://www.linkedin.com/posts/某某帳號_關鍵字-activity-7xxxxxxxxxxxxxxxx-XXXX
+```
+
+然後：
+
+```powershell
+python -m ytmusic dl "貼文網址" --video 1080 --cookies-from-browser chrome
+```
+
+> 💡 同樣的道理也適用 Facebook 與 Instagram：**複製貼文／Reel 的網址**，
+> 不要對影片本身按右鍵。
 
 > ⚠️ 這些平台上多數是**別人的個人內容**。下載前想一下你有沒有權利保存與再利用，
 > 詳見[使用須知](#使用須知)。

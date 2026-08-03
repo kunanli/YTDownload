@@ -38,14 +38,17 @@ EXIT_INTERRUPTED = 130
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ytmusic",
-        description="YouTube 音樂下載器：下載音訊、轉檔、寫入標籤與封面，並記錄下載歷史。",
+        description="影音下載器：支援 YouTube、Bilibili、Vimeo、微信視頻號等 1700 多個網站。\n"
+                    "下載音訊或影片、轉檔、寫入標籤與封面、抓歌詞字幕，並記錄下載歷史。",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
             "範例：\n"
-            "  ytmusic dl https://youtu.be/XXXXXXXXXXX\n"
-            "  ytmusic dl <播放清單網址> -f mp3 -q 320 -j 4 --playlist-folder\n"
-            "  ytmusic history list\n"
-            "  ytmusic config set output_dir ~/Music/YT\n"
+            "  ytmusic menu                                   互動式選單，不用記指令\n"
+            "  ytmusic dl <網址>                              下載音樂（自動辨識站台）\n"
+            "  ytmusic dl <網址> --video 1080 --subs          下載影片並嵌字幕\n"
+            "  ytmusic search \"歌名\"                          用歌名搜尋\n"
+            "  ytmusic wechat --login                         微信視頻號：先掃碼登入\n"
+            "  ytmusic sync                                   補上訂閱清單的新歌\n"
         ),
     )
     parser.add_argument("-V", "--version", action="version", version=f"ytmusic {__version__}")

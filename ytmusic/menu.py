@@ -12,9 +12,10 @@ from dataclasses import dataclass
 from typing import Callable
 
 BANNER = """
-  ============================================
-     YouTube 音樂下載器
-  ============================================
+  ================================================
+     影音下載器
+     YouTube · Bilibili · Vimeo · 微信視頻號 …
+  ================================================
 """
 
 VIDEO_CHOICES = {"1": "720", "2": "1080", "3": "best"}
@@ -79,10 +80,10 @@ class MenuItem:
 
 
 MENU_ITEMS = (
-    MenuItem("1", "下載音樂（貼網址）"),
+    MenuItem("1", "下載音樂（任何網站，貼網址）"),
     MenuItem("2", "用歌名搜尋"),
     MenuItem("3", "用歌手名稱找歌"),
-    MenuItem("4", "下載影片（貼網址）"),
+    MenuItem("4", "下載影片（任何網站，貼網址）"),
     MenuItem("5", "下載微信視頻號（會開瀏覽器）"),
     MenuItem("6", "同步追蹤的播放清單"),
     MenuItem("7", "看下載過什麼"),
