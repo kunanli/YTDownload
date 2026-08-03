@@ -807,7 +807,29 @@ pip install -e .
 | `--cookies FILE` | 指定 cookies.txt |
 | `--proxy URL` | 代理伺服器 |
 | `--rate-limit RATE` | 限速，例如 `500K` |
+| `--template TMPL` | 自訂 yt-dlp 檔名樣板（需含 `%(ext)s`） |
+| `--no-progress` | 關掉進度列，只輸出純文字 |
 | `-v, --verbose` | 顯示完整診斷訊息 |
+
+這些選項 `download`、`search`、`sync` 三個指令都能用。
+
+## 搜尋專屬選項
+
+| 選項 | 說明 |
+| --- | --- |
+| `-n, --limit N` | 顯示幾筆結果（預設 8，上限 50） |
+| `-a, --artist` | 把關鍵字當成歌手名，只留該歌手頻道的單曲 |
+| `--site {youtube,bilibili}` | 要搜尋哪個站台（預設 youtube） |
+| `--first` | 不詢問，直接抓第一筆（適合寫進腳本） |
+
+## 訂閱同步選項
+
+| 指令 | 說明 |
+| --- | --- |
+| `sync add URL [--name N] [-o DIR] [--video RES]` | 加入追蹤，可綁定專屬資料夾與畫質 |
+| `sync list` | 列出追蹤中的清單 |
+| `sync remove NAME` / `sync rename 舊 新` | 取消追蹤 / 改名 |
+| `sync [NAME...]` | 同步全部或指定清單 |
 
 ## 下載歷史
 
@@ -861,8 +883,9 @@ pip install -e ".[dev]"
 python -m pytest
 ```
 
-301 個測試，不需要網路。涵蓋標題解析、網址判斷、設定讀寫、歷史資料庫、
-播放清單攤平、檔名重新命名、字幕轉歌詞、搜尋結果篩選與選單流程。
+323 個測試，不需要網路。涵蓋標題解析、網址判斷、設定讀寫、歷史資料庫、
+播放清單攤平、檔名重新命名、字幕轉歌詞、搜尋結果篩選、跨站台相容
+（Bilibili 的 BV 號、Vimeo 網址轉換）與選單流程。
 
 ---
 
