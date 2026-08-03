@@ -107,6 +107,7 @@ MENU_ITEMS = (
     MenuItem("6", "同步追蹤的播放清單"),
     MenuItem("7", "看下載過什麼"),
     MenuItem("8", "追蹤一張新的播放清單"),
+    MenuItem("9", "檢查環境／連線（下載失敗時用）"),
 )
 
 
@@ -187,6 +188,11 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         if name:
             command += ["--name", name]
         return command
+
+    if choice == "9":
+        # 網址可留空：只想看裝了什麼的時候不該被逼著貼網址。
+        url = ask("  要測哪個網址？（可直接按 Enter 只檢查環境）：").strip()
+        return ["doctor", url] if url else ["doctor"]
 
     return None
 

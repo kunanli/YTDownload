@@ -49,6 +49,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  ytmusic search \"歌名\"                          用歌名搜尋\n"
             "  ytmusic wechat --login                         微信視頻號：先掃碼登入\n"
             "  ytmusic sync                                   補上訂閱清單的新歌\n"
+            "  ytmusic doctor <網址>                          下載失敗時，測出問題在哪\n"
         ),
     )
     parser.add_argument("-V", "--version", action="version", version=f"ytmusic {__version__}")
@@ -59,6 +60,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_search_parser(sub)
     _add_sync_parser(sub)
     _add_wechat_parser(sub)
+    _add_doctor_parser(sub)
     _add_history_parser(sub)
     _add_config_parser(sub)
     return parser
@@ -185,6 +187,44 @@ def _add_sync_parser(sub) -> None:
     # 直接打 `ytmusic sync` 就等於 `ytmusic sync run`
     _add_download_options(p)
     p.set_defaults(func=cmd_sync_run, action="run", names=[])
+
+
+def _add_doctor_parser(sub) -> None:
+    p = sub.add_parser(
+        "doctor", help="檢查環境；給網址還會測哪種連線方式通得了",
+        description="列出相依套件的狀態。附上網址時，會用一般連線、強制 IPv4、"
+                    "假扮瀏覽器各試一次，直接告訴你哪一種通得了。",
+    )
+    p.add_argument("url", nargs="?", metavar="URL", help="要測試連線的網址")
+    p.set_defaults(func=cmd_doctor)
+
+
+def cmd_doctor(args: argparse.Namespace) -> int:
+    from .doctor import conclusion, environment, missing_advice, probe_url
+
+    checks = environment()
+    print("環境檢查", file=sys.stderr)
+    for check in checks:
+        print(check.line(), file=sys.stderr)
+
+    problems = missing_advice(checks)
+    if problems:
+        print("\n要處理的：", file=sys.stderr)
+        for problem in problems:
+            print(f"  · {problem}", file=sys.stderr)
+
+    if not args.url:
+        print("\n想知道某個網址為什麼連不上，把網址接在後面："
+              "\n  python -m ytmusic doctor \"網址\"", file=sys.stderr)
+        return EXIT_OK if not problems else EXIT_PRECONDITION
+
+    print(f"\n連線測試：{args.url}", file=sys.stderr)
+    results = probe_url(args.url, Config.load())
+    print(file=sys.stderr)
+    for check in results:
+        print(check.line(), file=sys.stderr)
+    print(f"\n結論：{conclusion(results)}", file=sys.stderr)
+    return EXIT_OK if any(c.mark == "\u2714" for c in results) else EXIT_FAILED
 
 
 def _add_wechat_parser(sub) -> None:
