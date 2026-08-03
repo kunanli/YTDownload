@@ -196,6 +196,8 @@ def _add_wechat_parser(sub) -> None:
                    help="不顯示瀏覽器視窗（已登入過才能用，第一次登入需要看得到畫面）")
     p.add_argument("--keep-broken", action="store_true",
                    help="即使抓到的檔案看起來不能播也保留下來")
+    p.add_argument("-y", "--yes", action="store_true",
+                   help="需要安裝 Playwright／瀏覽器時不詢問，直接裝")
     p.set_defaults(func=cmd_wechat)
 
 
@@ -216,7 +218,8 @@ def cmd_wechat(args: argparse.Namespace) -> int:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     try:
-        result = capture_media(args.url, timeout=args.timeout, headless=args.headless)
+        result = capture_media(args.url, timeout=args.timeout,
+                               headless=args.headless, assume_yes=args.yes)
     except BrowserUnavailable as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_PRECONDITION

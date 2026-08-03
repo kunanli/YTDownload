@@ -12,7 +12,8 @@ from pathlib import Path
 
 from .config import config_home
 from .wechat import (
-    PLAYWRIGHT_HINT, CaptureResult, MediaCandidate, WECHAT_MEDIA_HOSTS, looks_like_media,
+    PLAYWRIGHT_HINT, CaptureResult, MediaCandidate, WECHAT_MEDIA_HOSTS,
+    is_missing_browser_error, looks_like_media,
 )
 
 # 登入狀態存在這裡，掃碼一次之後就不用再掃。
@@ -24,23 +25,87 @@ class BrowserUnavailable(RuntimeError):
     """沒裝 Playwright 或瀏覽器啟動失敗。"""
 
 
-def _load_playwright():
+def pip_install_command(package: str) -> list[str]:
+    """一律用 `python -m pip`，才不會受 PATH 有沒有 Scripts 目錄影響。"""
+    return [sys.executable, "-m", "pip", "install", package]
+
+
+def browser_install_command() -> list[str]:
+    """同理：`python -m playwright`，不是 `playwright`。"""
+    return [sys.executable, "-m", "playwright", "install", "chromium"]
+
+
+def _run(command: list[str], out) -> bool:
+    import subprocess
+
+    print(f"  執行：{' '.join(command[1:])}", file=out)
+    try:
+        return subprocess.run(command).returncode == 0
+    except Exception as exc:
+        print(f"  失敗：{exc}", file=out)
+        return False
+
+
+def _confirm(question: str, *, assume_yes: bool, ask, out) -> bool:
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        return False  # 非互動環境不該擅自安裝東西
+    try:
+        return ask(f"{question} [Y/n] ").strip().lower() in {"", "y", "yes", "是"}
+    except (EOFError, KeyboardInterrupt):
+        print(file=out)
+        return False
+
+
+def ensure_playwright(*, assume_yes: bool = False, ask=input, out=None):
+    """確保 Playwright 套件在；缺的話徵得同意後自動安裝。
+
+    刻意先問過再裝——擅自在使用者機器上安裝套件不是該預設做的事。
+    """
+    out = out or sys.stderr
+    try:
+        from playwright.sync_api import sync_playwright
+        return sync_playwright
+    except ImportError:
+        pass
+
+    print("\n這個功能需要 Playwright（用來開瀏覽器），目前沒有安裝。", file=out)
+    if not _confirm("要現在自動安裝嗎？", assume_yes=assume_yes, ask=ask, out=out):
+        raise BrowserUnavailable(PLAYWRIGHT_HINT)
+
+    if not _run(pip_install_command("playwright"), out):
+        raise BrowserUnavailable(f"自動安裝失敗。\n\n{PLAYWRIGHT_HINT}")
+
     try:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
-        raise BrowserUnavailable(PLAYWRIGHT_HINT) from exc
+        raise BrowserUnavailable(
+            f"裝好了但仍然匯入不到，可能要重開視窗再試一次。\n\n{PLAYWRIGHT_HINT}"
+        ) from exc
+    print("  Playwright 安裝完成。\n", file=out)
     return sync_playwright
 
 
+def ensure_browser(*, assume_yes: bool = False, ask=input, out=None) -> bool:
+    """下載 Chromium。回傳是否成功。"""
+    out = out or sys.stderr
+    print("\n還缺瀏覽器本體（Chromium，約 150 MB）。", file=out)
+    if not _confirm("要現在下載嗎？", assume_yes=assume_yes, ask=ask, out=out):
+        return False
+    return _run(browser_install_command(), out)
+
+
 def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
-                  proxy: str | None = None, out=None) -> CaptureResult:
+                  proxy: str | None = None, assume_yes: bool = False,
+                  out=None) -> CaptureResult:
     """開瀏覽器載入頁面，回傳攔截到的影片來源。
 
     ``headless=False`` 是預設值：第一次使用時需要看得到畫面才能掃碼登入。
     登入狀態會存在設定目錄下，之後就不用再掃。
     """
     out = out or sys.stderr
-    sync_playwright = _load_playwright()
+    sync_playwright = ensure_playwright(assume_yes=assume_yes, out=out)
 
     result = CaptureResult(url=url)
     seen: dict[str, MediaCandidate] = {}
@@ -68,18 +133,29 @@ def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
     # 需要透過代理才能連外的環境（公司網路、沙箱）也要能用。
     proxy = proxy or os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy")
 
+    launch_kwargs = {
+        "user_data_dir": str(directory),
+        "executable_path": executable,
+        "headless": headless,
+        "proxy": {"server": proxy, "bypass": "localhost,127.0.0.1"} if proxy else None,
+        "ignore_https_errors": bool(proxy),  # 代理多半用自簽憑證
+        "args": ["--autoplay-policy=no-user-gesture-required"],
+    }
+
     with sync_playwright() as playwright:
         try:
-            context = playwright.chromium.launch_persistent_context(
-                str(directory),
-                executable_path=executable,
-                headless=headless,
-                proxy={"server": proxy, "bypass": "localhost,127.0.0.1"} if proxy else None,
-                ignore_https_errors=bool(proxy),  # 代理多半用自簽憑證
-                args=["--autoplay-policy=no-user-gesture-required"],
-            )
+            context = playwright.chromium.launch_persistent_context(**launch_kwargs)
         except Exception as exc:
-            raise BrowserUnavailable(f"瀏覽器啟動失敗：{exc}\n\n{PLAYWRIGHT_HINT}") from exc
+            if not is_missing_browser_error(exc):
+                raise BrowserUnavailable(
+                    f"瀏覽器啟動失敗：{exc}\n\n{PLAYWRIGHT_HINT}") from exc
+            if not ensure_browser(assume_yes=assume_yes, out=out):
+                raise BrowserUnavailable(PLAYWRIGHT_HINT) from exc
+            try:
+                context = playwright.chromium.launch_persistent_context(**launch_kwargs)
+            except Exception as retry_exc:
+                raise BrowserUnavailable(
+                    f"瀏覽器啟動失敗：{retry_exc}\n\n{PLAYWRIGHT_HINT}") from retry_exc
 
         try:
             page = context.pages[0] if context.pages else context.new_page()

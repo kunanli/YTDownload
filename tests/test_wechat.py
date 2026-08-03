@@ -1,7 +1,8 @@
 import pytest
 
 from ytmusic.wechat import (
-    CaptureResult, MediaCandidate, is_wechat_url, looks_like_media,
+    CaptureResult, MediaCandidate, is_missing_browser_error, is_wechat_url,
+    looks_like_media,
     looks_like_playable_video, pick_best_media, suggest_filename,
 )
 
@@ -134,3 +135,46 @@ class TestSuggestFilename:
 
     def test_illegal_characters_are_sanitised(self):
         assert suggest_filename("a/b:c", "d?e") == "d_e - a_b_c"
+
+
+class TestMissingBrowserDetection:
+    def test_detects_playwright_missing_browser(self):
+        # Playwright 實際吐出的訊息
+        assert is_missing_browser_error(Exception(
+            "BrowserType.launch: Executable doesn't exist at "
+            "/opt/pw-browsers/chromium-1234/chrome-linux/headless_shell"
+        ))
+
+    def test_detects_install_prompt(self):
+        assert is_missing_browser_error(Exception(
+            "Please run the following command to download new browsers"
+        ))
+
+    def test_other_errors_are_not_auto_fixable(self):
+        assert not is_missing_browser_error(Exception("Target page crashed"))
+        assert not is_missing_browser_error(Exception("net::ERR_CONNECTION_RESET"))
+
+
+class TestInstallCommands:
+    def test_always_uses_python_dash_m(self):
+        # Windows 上 pip 裝的執行檔多半不在 PATH，直接打 `playwright` 會失敗，
+        # 所以一律走 `python -m`
+        from ytmusic.browser import browser_install_command, pip_install_command
+        import sys
+
+        assert pip_install_command("playwright") == [
+            sys.executable, "-m", "pip", "install", "playwright"
+        ]
+        assert browser_install_command() == [
+            sys.executable, "-m", "playwright", "install", "chromium"
+        ]
+
+    def test_hint_does_not_suggest_bare_playwright(self):
+        from ytmusic.wechat import PLAYWRIGHT_HINT
+
+        for line in PLAYWRIGHT_HINT.splitlines():
+            stripped = line.strip()
+            if stripped.startswith("playwright ") or stripped.startswith("pip install"):
+                raise AssertionError(f"提示不該叫使用者直接打：{stripped}")
+        assert "python -m playwright install chromium" in PLAYWRIGHT_HINT
+        assert "python -m pip install playwright" in PLAYWRIGHT_HINT

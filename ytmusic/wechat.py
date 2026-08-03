@@ -142,13 +142,29 @@ ENCRYPTED_HINT = """抓到的檔案不是可播放的影片，開頭不是已知
 本工具無法解密——請改用 wx_video_download，它會攔截客戶端流量並解密。
 詳見 README 的「微信視頻號」章節。"""
 
+# 一律用 `python -m playwright`：pip 裝的 playwright.exe 在 Windows 上多半
+# 不在 PATH，直接打 `playwright` 會得到 CommandNotFoundException。
 PLAYWRIGHT_HINT = """微信視頻號需要 Playwright 才能運作（要開一個真正的瀏覽器）。
 
-安裝：
-  pip install playwright
-  playwright install chromium
+手動安裝：
+  python -m pip install playwright
+  python -m playwright install chromium
 
-裝好之後再跑一次同樣的指令。"""
+注意是 `python -m playwright`，不是 `playwright`——pip 裝的執行檔在 Windows
+上通常不在 PATH，直接打會說「不是內部或外部命令」。"""
+
+# Playwright 找不到瀏覽器時的錯誤訊息特徵。
+_MISSING_BROWSER_MARKERS = (
+    "executable doesn't exist",
+    "please run the following command to download new browsers",
+    "playwright install",
+)
+
+
+def is_missing_browser_error(exc: BaseException) -> bool:
+    """判斷失敗是不是「套件有裝但瀏覽器沒下載」——這種可以自動補。"""
+    message = str(exc).lower()
+    return any(marker in message for marker in _MISSING_BROWSER_MARKERS)
 
 
 def download_media(candidate: "MediaCandidate", target, *, cookies: dict | None = None,

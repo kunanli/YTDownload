@@ -2,6 +2,26 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.6.0
+
+### 新增
+
+- 微信視頻號第一次執行時，缺 Playwright 或 Chromium 會**詢問後自動安裝**，
+  不必事先準備任何東西；`-y` 可跳過詢問
+- 安裝一律走 `python -m pip` 與 `python -m playwright`
+
+### 修正
+
+- 安裝提示原本寫 `playwright install chromium`，但 pip 裝的執行檔在 Windows
+  上不在 PATH，使用者會得到「不是內部或外部命令」——跟先前 `ytmusic` 短指令
+  同一個坑。提示改成 `python -m playwright install chromium`，並加測試確保
+  提示不會再出現裸的 `playwright` 或 `pip install`
+
+### 說明
+
+安裝前一律先問過。非互動環境（stdin 不是終端機）一律不自動安裝，改為印出
+手動步驟——擅自在使用者機器上裝東西不該是預設行為。
+
 ## 1.5.0
 
 ### 新增

@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.5.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.6.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -82,6 +82,7 @@
 | 下載很慢、一直失敗 | [更新 yt-dlp](#下載很慢或一直失敗) |
 | 「沒有字幕可轉成歌詞」 | [那支影片沒字幕，正常現象](#歌詞與字幕) |
 | 想看完整錯誤訊息 | [指令後面加 `-v`](#我想看到底出了什麼事) |
+| `'playwright' is not recognized` | [要用 `python -m playwright`](#微信視頻號) |
 
 ---
 
@@ -417,11 +418,31 @@ python -m ytmusic dl "https://www.instagram.com/reel/..." --cookies-from-browser
 所以這裡走的是另一條路：**開一個真正的瀏覽器把頁面載入，攔截頁面自己發出的請求**。
 
 ```powershell
-pip install playwright
-playwright install chromium
-
 python -m ytmusic wechat "https://weixin.qq.com/sph/XXXXXXXX"
 ```
+
+**不用先安裝任何東西** —— 第一次執行時如果缺 Playwright 或瀏覽器，
+工具會問你要不要自動裝：
+
+```
+這個功能需要 Playwright（用來開瀏覽器），目前沒有安裝。
+要現在自動安裝嗎？ [Y/n]
+
+還缺瀏覽器本體（Chromium，約 150 MB）。
+要現在下載嗎？ [Y/n]
+```
+
+直接按 Enter 就會裝好並繼續。不想被問就加 `-y`。
+
+> 💡 想自己手動裝的話，**注意要用 `python -m`**：
+>
+> ```powershell
+> python -m pip install playwright
+> python -m playwright install chromium
+> ```
+>
+> 直接打 `playwright install chromium` 在 Windows 上多半會說
+> 「不是內部或外部命令」——pip 裝的執行檔跟 `ytmusic` 一樣不在 PATH。
 
 會跳出一個瀏覽器視窗：
 
@@ -443,6 +464,7 @@ python -m ytmusic wechat "網址" --headless
 | `--timeout 秒` | 最多等多久（預設 120） |
 | `--headless` | 不顯示視窗（要先登入過） |
 | `--keep-broken` | 即使抓到的檔案看起來不能播也保留 |
+| `-y, --yes` | 需要安裝 Playwright／瀏覽器時不詢問，直接裝 |
 
 > ### ✅ 為什麼這個做法比較好
 >
