@@ -1,8 +1,8 @@
 import pytest
 
 from ytmusic.wechat import (
-    CaptureResult, MediaCandidate, is_missing_browser_error, is_wechat_url,
-    looks_like_media,
+    CaptureResult, MediaCandidate, extract_video_urls, has_probable_video,
+    is_feed_api, is_missing_browser_error, is_wechat_url, looks_like_media,
     looks_like_playable_video, pick_best_media, suggest_filename,
 )
 
@@ -238,3 +238,71 @@ class TestDescribe:
 
     def test_marks_thumbnail(self):
         assert "縮圖" in MediaCandidate("https://vweixinthumb.tc.qq.com/a").describe()
+
+
+class TestHasProbableVideo:
+    """瀏覽器提前關閉的元凶：封面圖也放在 finder.video.qq.com 上。
+
+    只看「來自影片 CDN」的話，封面一載入就判定抓到影片、立刻關掉視窗，
+    使用者連掃碼的時間都沒有。
+    """
+
+    def test_cover_on_video_cdn_does_not_count(self):
+        cover = MediaCandidate("https://finder.video.qq.com/251/x/stodownload?k=1",
+                               content_type="image/jpg", size=48_000,
+                               from_media_host=True)
+        assert not has_probable_video([cover])
+
+    def test_real_video_counts(self):
+        video = MediaCandidate("https://finder.video.qq.com/251/v",
+                               content_type="video/mp4", size=8_000_000,
+                               from_media_host=True)
+        assert has_probable_video([video])
+
+    def test_small_non_thumbnail_does_not_count(self):
+        probe = MediaCandidate("https://finder.video.qq.com/x", size=1024,
+                               from_media_host=True)
+        assert not has_probable_video([probe])
+
+    def test_empty(self):
+        assert not has_probable_video([])
+
+
+class TestFeedApi:
+    def test_recognises_feed_info_endpoint(self):
+        assert is_feed_api(
+            "https://channels.weixin.qq.com/finder-preview/api/feed/get_feed_info?_rid=x"
+        )
+
+    def test_ordinary_asset_is_not_the_api(self):
+        assert not is_feed_api("https://res.wx.qq.com/t/wx_fed/feed.9c135e64.js")
+
+
+class TestExtractVideoUrls:
+    def test_finds_nested_video_url(self):
+        data = {"data": {"object": {"media": [
+            {"url": "https://finder.video.qq.com/251/v?token=abc"},
+        ]}}}
+        assert extract_video_urls(data) == ["https://finder.video.qq.com/251/v?token=abc"]
+
+    def test_skips_thumbnail_urls(self):
+        data = {"cover": "https://vweixinthumb.tc.qq.com/cover.jpg",
+                "url": "https://finder.video.qq.com/251/v"}
+        assert extract_video_urls(data) == ["https://finder.video.qq.com/251/v"]
+
+    def test_finds_plain_mp4_anywhere(self):
+        assert extract_video_urls({"a": ["https://cdn.example.com/x.mp4"]}) == [
+            "https://cdn.example.com/x.mp4"
+        ]
+
+    def test_ignores_unrelated_urls(self):
+        assert extract_video_urls({"doc": "https://example.com/page.html"}) == []
+
+    def test_deduplicates(self):
+        url = "https://finder.video.qq.com/251/v"
+        assert extract_video_urls({"a": url, "b": url}) == [url]
+
+    def test_handles_empty_and_scalars(self):
+        assert extract_video_urls({}) == []
+        assert extract_video_urls(None) == []
+        assert extract_video_urls(123) == []

@@ -151,6 +151,52 @@ def pick_best_media(candidates: list[MediaCandidate]) -> MediaCandidate | None:
                                       c.size, not c.is_playlist))
 
 
+def has_probable_video(candidates: list[MediaCandidate]) -> bool:
+    """有沒有看起來真的是影片的候選——用來決定可以停止等待了。
+
+    絕不能只看「來自影片 CDN」：封面圖也放在 finder.video.qq.com 上，
+    一載入就會誤判成抓到影片，瀏覽器隨即關閉，使用者連掃碼的時間都沒有。
+    """
+    return any(
+        c.url and not c.is_thumbnail and c.size >= MIN_VIDEO_BYTES
+        for c in candidates
+    )
+
+
+# 視頻號頁面用這支 API 取得影片資訊，回應裡就含影片位址。
+FEED_API_MARKERS = ("get_feed_info", "finder/feed", "get_object_detail")
+
+
+def is_feed_api(url: str) -> bool:
+    lowered = (url or "").lower()
+    return any(marker in lowered for marker in FEED_API_MARKERS)
+
+
+def extract_video_urls(data) -> list[str]:
+    """從 API 回應裡遞迴找出影片位址。
+
+    比起猜「頁面下載了什麼」，直接讀 API 給的答案可靠得多——影片還沒開始播放
+    時也拿得到。
+    """
+    found: list[str] = []
+
+    def walk(node) -> None:
+        if isinstance(node, dict):
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+        elif isinstance(node, str) and node.startswith(("http://", "https://")):
+            host = node.split("//", 1)[-1].split("/", 1)[0].split(":")[0]
+            if any(host.endswith(h) for h in WECHAT_MEDIA_HOSTS) or ".mp4" in node.lower():
+                if not any(marker in node.lower() for marker in WECHAT_THUMB_HOSTS):
+                    found.append(node)
+
+    walk(data)
+    return list(dict.fromkeys(found))  # 去重且保留順序
+
+
 def looks_like_playable_video(head: bytes) -> bool:
     """檢查檔案開頭是不是已知的影片容器。
 

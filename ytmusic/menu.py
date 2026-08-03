@@ -147,8 +147,10 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         return command + _playlist_flags(url, ask)
 
     if choice == "5":
-        url = ask("  貼上視頻號網址：").strip()
-        return _wechat_command(url, ask) if url else None
+        url = ask("  貼上視頻號網址（第一次使用請直接按 Enter 先登入）：").strip()
+        if not url:
+            return ["wechat", "--login"]
+        return _wechat_command(url, ask)
 
     if choice == "6":
         return ["sync"]

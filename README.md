@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.7.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.8.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -444,11 +444,22 @@ python -m ytmusic wechat "https://weixin.qq.com/sph/XXXXXXXX"
 > 直接打 `playwright install chromium` 在 Windows 上多半會說
 > 「不是內部或外部命令」——pip 裝的執行檔跟 `ytmusic` 一樣不在 PATH。
 
-會跳出一個瀏覽器視窗：
+### 第一次：先登入
 
-1. 若出現 QR code，用**手機微信掃碼登入**（只需一次，登入狀態會存起來）
-2. 讓影片開始播放
-3. 抓到影片就會自動下載並關閉視窗
+```powershell
+python -m ytmusic wechat --login
+```
+
+會開一個瀏覽器，**視窗不會自動關閉** —— 慢慢掃碼，登入好之後回到終端機按 Enter。
+登入狀態會存起來，之後不用再掃。
+
+### 之後：直接下載
+
+```powershell
+python -m ytmusic wechat "https://weixin.qq.com/sph/XXXXXXXX"
+```
+
+瀏覽器會開啟頁面、讓影片播放，抓到影片就自動下載並關閉。
 
 登入過之後可以加 `--headless` 不顯示視窗：
 
@@ -464,6 +475,7 @@ python -m ytmusic wechat "網址" --headless
 | `--timeout 秒` | 最多等多久（預設 120） |
 | `--headless` | 不顯示視窗（要先登入過） |
 | `--keep-broken` | 即使抓到的檔案看起來不能播也保留 |
+| `--login` | 只開瀏覽器掃碼登入，按 Enter 才關閉 |
 | `-y, --yes` | 需要安裝 Playwright／瀏覽器時不詢問，直接裝 |
 
 > ### ✅ 為什麼這個做法比較好

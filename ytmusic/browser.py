@@ -13,7 +13,8 @@ from pathlib import Path
 from .config import config_home
 from .wechat import (
     PLAYWRIGHT_HINT, CaptureResult, MediaCandidate, WECHAT_MEDIA_HOSTS,
-    is_missing_browser_error, looks_like_media,
+    extract_video_urls, has_probable_video, is_feed_api, is_missing_browser_error,
+    looks_like_media,
 )
 
 # 登入狀態存在這裡，掃碼一次之後就不用再掃。
@@ -96,6 +97,38 @@ def ensure_browser(*, assume_yes: bool = False, ask=input, out=None) -> bool:
     return _run(browser_install_command(), out)
 
 
+def login(*, out=None, assume_yes: bool = False) -> bool:
+    """只開瀏覽器讓使用者掃碼登入，按 Enter 才關閉。
+
+    抓影片時有時間上限，掃碼常常來不及；登入獨立成一步就沒有這個壓力。
+    """
+    out = out or sys.stderr
+    sync_playwright = ensure_playwright(assume_yes=assume_yes, out=out)
+    directory = profile_dir()
+    directory.mkdir(parents=True, exist_ok=True)
+
+    with sync_playwright() as playwright:
+        context = playwright.chromium.launch_persistent_context(
+            str(directory),
+            executable_path=os.environ.get("YTMUSIC_CHROMIUM") or None,
+            headless=False,
+        )
+        try:
+            page = context.pages[0] if context.pages else context.new_page()
+            page.goto("https://channels.weixin.qq.com/", wait_until="domcontentloaded",
+                      timeout=60_000)
+            print("\n瀏覽器已開啟。請用手機微信掃碼登入。", file=out)
+            print("這個視窗不會自動關閉——登入完成後回到這裡按 Enter。\n", file=out)
+            try:
+                input()
+            except (EOFError, KeyboardInterrupt):
+                print(file=out)
+            print(f"登入狀態已存到：{directory}", file=out)
+        finally:
+            context.close()
+    return True
+
+
 def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
                   proxy: str | None = None, assume_yes: bool = False,
                   out=None) -> CaptureResult:
@@ -131,6 +164,13 @@ def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
             if looks_like_media(response.url, content_type):
                 if previous is None or size > seen.get(response.url, candidate).size:
                     seen[response.url] = candidate
+            elif is_feed_api(response.url):
+                # 直接讀 API 給的答案，比猜「頁面下載了什麼」可靠得多
+                for found in extract_video_urls(response.json()):
+                    seen.setdefault(found, MediaCandidate(
+                        url=found, content_type="video/mp4",
+                        from_media_host=True,
+                    ))
         except Exception:
             pass  # 攔截失敗不該中斷整個流程
 
@@ -189,7 +229,9 @@ def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
             while waited < deadline:
                 page.wait_for_timeout(step)
                 waited += step
-                if any(c.from_media_host for c in seen.values()):
+                # 只有「真的像影片」才提前結束。封面圖也放在 finder.video.qq.com
+                # 上，若只看網域會一載入就關掉視窗，使用者連掃碼都來不及。
+                if has_probable_video(list(seen.values())):
                     break
                 if waited % 20000 == 0:
                     print(f"  仍在等待…（已等 {waited // 1000} 秒，"

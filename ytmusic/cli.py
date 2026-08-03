@@ -188,7 +188,9 @@ def _add_wechat_parser(sub) -> None:
         description="微信視頻號的網址沒辦法直接解析，這個指令會開一個瀏覽器把頁面"
                     "載入，攔截頁面自己發出的請求來取得影片。第一次要掃碼登入。",
     )
-    p.add_argument("url", metavar="URL", help="視頻號網址")
+    p.add_argument("url", nargs="?", metavar="URL", help="視頻號網址")
+    p.add_argument("--login", action="store_true",
+                   help="只開瀏覽器掃碼登入，按 Enter 才關閉（第一次先做這步）")
     p.add_argument("-o", "--output", metavar="DIR", help="輸出資料夾")
     p.add_argument("--timeout", type=int, default=120, metavar="秒",
                    help="最多等多久（預設 120 秒）")
@@ -207,6 +209,22 @@ def cmd_wechat(args: argparse.Namespace) -> int:
         ENCRYPTED_HINT, download_media, is_wechat_url, looks_like_playable_video,
         suggest_filename,
     )
+
+    if args.login:
+        from .browser import login
+
+        try:
+            login(assume_yes=args.yes)
+        except BrowserUnavailable as exc:
+            print(str(exc), file=sys.stderr)
+            return EXIT_PRECONDITION
+        print("\n登入完成。現在可以下載了：\n"
+              "  python -m ytmusic wechat \"視頻號網址\"", file=sys.stderr)
+        return EXIT_OK
+
+    if not args.url:
+        print("請給我視頻號網址，或先用 --login 掃碼登入。", file=sys.stderr)
+        return EXIT_USAGE
 
     if not is_wechat_url(args.url):
         print("這看起來不是微信視頻號的網址。一般網址請用 `ytmusic dl`。",

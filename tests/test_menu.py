@@ -110,8 +110,9 @@ class TestBuildCommand:
             "wechat", "https://weixin.qq.com/sph/a", "--headless"
         ]
 
-    def test_wechat_blank_url_cancels(self):
-        assert build_command("5", Asker("  ")) is None
+    def test_wechat_blank_url_starts_login(self):
+        # 掃碼常常來不及，空輸入直接進登入模式（視窗不會自動關）
+        assert build_command("5", Asker("  ")) == ["wechat", "--login"]
 
     def test_history(self):
         assert build_command("7", Asker()) == ["history", "list"]
