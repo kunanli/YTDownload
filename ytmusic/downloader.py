@@ -667,13 +667,21 @@ def _clean_error_text(raw: str) -> str:
     return message[:200]
 
 
+# 短於這個長度的訊息幾乎無法判斷原因，補上例外型別才有線索。
+_UNINFORMATIVE_LENGTH = 12
+
+
 def _short_error(exc: Exception, logger: _CollectingLogger | None = None) -> str:
     """把錯誤壓成一行；確保永遠有內容可顯示。
 
     某些情況下例外本身沒有訊息（yt-dlp 已經把細節送去 logger 了），此時改用
-    logger 收到的最後一則錯誤，再不然至少報出例外型別。
+    logger 收到的最後一則錯誤。訊息短到無法判斷原因時補上例外型別——曾發生
+    使用者看到「無法讀取 <網址>：」後面一片空白，完全無從查起。
     """
     message = _clean_error_text(str(exc))
-    if not message and logger is not None and logger.errors:
-        message = _clean_error_text(logger.errors[-1])
-    return message or f"{type(exc).__name__}（yt-dlp 未提供詳細訊息，可加 -v 看完整輸出）"
+    if len(message) < _UNINFORMATIVE_LENGTH and logger is not None and logger.errors:
+        message = _clean_error_text(logger.errors[-1]) or message
+    if len(message) < _UNINFORMATIVE_LENGTH:
+        kind = type(exc).__name__
+        message = f"{message} [{kind}]".strip() if message else f"{kind}（沒有訊息）"
+    return message

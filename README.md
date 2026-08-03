@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.9.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.9.1** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -404,7 +404,7 @@ python -m ytmusic dl "https://www.instagram.com/reel/..." --cookies-from-browser
 | **Vimeo** | 直接可用。一般頁面要先換 OAuth token，某些網路環境會被回 `401 Unauthorized`，遇到時工具會**自動改用播放器網址重試**，你不用做任何事 |
 | **Facebook** | **公開**影片與 Reels 直接可用；私人貼文、社團內容要加 `--cookies-from-browser` |
 | **Instagram** | **幾乎都要登入**。沒帶 cookies 會看到「Instagram sent an empty media response」，加 `--cookies-from-browser chrome` 即可 |
-| **LinkedIn** | 多數貼文和 Learning 課程要登入，同樣加 `--cookies-from-browser`；**要複製的是貼文網址，不是影片網址**，見下方 |
+| **LinkedIn** | 短網址 `lnkd.in/p/...` 與貼文網址都可以，**公開貼文不需登入**；登入才看得到的內容才要加 `--cookies-from-browser`。**要複製的是貼文網址，不是影片網址**，見下方 |
 
 需要登入的站台，記得**先把該瀏覽器完全關掉**再執行，詳見
 [「HTTP Error 403」或「需要登入」](#http-error-403或需要登入)。

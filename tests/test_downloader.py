@@ -245,6 +245,15 @@ class TestShortError:
         assert message
         assert "ValueError" in message
 
+    def test_uninformative_message_gains_the_exception_type(self):
+        # 使用者曾看到「無法讀取 <網址>：」後面一片空白，完全無從查起
+        message = _short_error(OSError("403"))
+        assert "403" in message and "OSError" in message
+
+    def test_informative_message_is_left_alone(self):
+        message = _short_error(Exception("[LinkedIn] abc: Unsupported URL"))
+        assert message == "[LinkedIn] abc: Unsupported URL"
+
     def test_truncates_very_long_messages(self):
         assert len(_short_error(Exception("x" * 500))) == 200
 
