@@ -66,9 +66,10 @@ MENU_ITEMS = (
     MenuItem("2", "用歌名搜尋"),
     MenuItem("3", "用歌手名稱找歌"),
     MenuItem("4", "下載影片（貼網址）"),
-    MenuItem("5", "同步追蹤的播放清單"),
-    MenuItem("6", "看下載過什麼"),
-    MenuItem("7", "追蹤一張新的播放清單"),
+    MenuItem("5", "下載微信視頻號（會開瀏覽器）"),
+    MenuItem("6", "同步追蹤的播放清單"),
+    MenuItem("7", "看下載過什麼"),
+    MenuItem("8", "追蹤一張新的播放清單"),
 )
 
 
@@ -123,12 +124,21 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         return command + _playlist_flags(url, ask)
 
     if choice == "5":
-        return ["sync"]
+        url = ask("  貼上視頻號網址：").strip()
+        if not url:
+            return None
+        # 第一次要看得到視窗才能掃碼；登入過的人可以省下開視窗。
+        headless = ask("  已經登入過了嗎？免開視窗執行 [y/Enter=顯示視窗] ")
+        command = ["wechat", url]
+        return command + ["--headless"] if headless.strip().lower() in YES else command
 
     if choice == "6":
-        return ["history", "list"]
+        return ["sync"]
 
     if choice == "7":
+        return ["history", "list"]
+
+    if choice == "8":
         url = ask("  貼上播放清單網址：").strip()
         if not url:
             return None

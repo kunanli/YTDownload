@@ -85,18 +85,31 @@ class TestBuildCommand:
         assert build_command("4", Asker("https://youtu.be/a", "99", ""))[-1] == "720"
 
     def test_sync(self):
-        assert build_command("5", Asker()) == ["sync"]
+        assert build_command("6", Asker()) == ["sync"]
+
+    def test_wechat_shows_window_by_default(self):
+        assert build_command("5", Asker("https://weixin.qq.com/sph/a", "")) == [
+            "wechat", "https://weixin.qq.com/sph/a"
+        ]
+
+    def test_wechat_headless_when_already_logged_in(self):
+        assert build_command("5", Asker("https://weixin.qq.com/sph/a", "y")) == [
+            "wechat", "https://weixin.qq.com/sph/a", "--headless"
+        ]
+
+    def test_wechat_blank_url_cancels(self):
+        assert build_command("5", Asker("  ")) is None
 
     def test_history(self):
-        assert build_command("6", Asker()) == ["history", "list"]
+        assert build_command("7", Asker()) == ["history", "list"]
 
     def test_sync_add_with_name(self):
-        assert build_command("7", Asker("https://x/1", "我的最愛")) == [
+        assert build_command("8", Asker("https://x/1", "我的最愛")) == [
             "sync", "add", "https://x/1", "--name", "我的最愛"
         ]
 
     def test_sync_add_without_name(self):
-        assert build_command("7", Asker("https://x/1", "")) == ["sync", "add", "https://x/1"]
+        assert build_command("8", Asker("https://x/1", "")) == ["sync", "add", "https://x/1"]
 
     def test_unknown_choice_returns_none(self):
         assert build_command("99", Asker()) is None
@@ -128,7 +141,7 @@ class TestRunMenu:
         assert calls == [["dl", "https://youtu.be/a"]]
 
     def test_loops_until_exit(self):
-        _, calls, _ = self._run("6", "", "6", "", "0")
+        _, calls, _ = self._run("7", "", "7", "", "0")
         assert calls == [["history", "list"], ["history", "list"]]
 
     def test_blank_input_cancels_back_to_menu_without_running(self):
@@ -143,14 +156,14 @@ class TestRunMenu:
         assert "再見" in text
 
     def test_returns_last_exit_code(self):
-        code, _, _ = self._run("6", "", "0", runner=lambda argv: 4)
+        code, _, _ = self._run("7", "", "0", runner=lambda argv: 4)
         assert code == 4
 
     def test_keyboard_interrupt_during_command_is_survivable(self):
         def boom(argv):
             raise KeyboardInterrupt
 
-        code, _, text = self._run("6", "", "0", runner=boom)
+        code, _, text = self._run("7", "", "0", runner=boom)
         assert "已中斷" in text
         assert code == 130
 

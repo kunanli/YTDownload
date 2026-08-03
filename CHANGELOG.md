@@ -14,6 +14,8 @@
     不會留下打不開的檔案
   - Playwright 為選用相依：`pip install "ytmusic[wechat]"`
   - 支援 `YTMUSIC_CHROMIUM` 指定瀏覽器路徑、自動沿用系統代理設定
+  - 啟動選單新增 `[5] 下載微信視頻號`，會問要不要免視窗執行
+    （`下載.bat` 本身不需更動——它只呼叫 `ytmusic menu`）
 
 ### 已驗證與未驗證
 
