@@ -93,6 +93,8 @@ class Downloader:
         self.lyrics = lyrics
         # 使用者明確指定要假扮瀏覽器時，一開始就用；沒指定則只在連線失敗後才試。
         self.impersonate = config.impersonate
+        # 短網址展開會把網址送給第三方，所以由外層取得同意後才掛上來。
+        self.expander = None
         self._stop = threading.Event()
 
     # -- 前置檢查 ---------------------------------------------------------
@@ -119,12 +121,19 @@ class Downloader:
         兩招針對的是不同病因，所以先後有別：IPv4 治的是路由半通不通，
         假扮瀏覽器治的是對方看 TLS 指紋擋人——後者要裝東西，所以擺後面。
         """
+        from .shorturl import is_short_url
+
         attempts: list[tuple[str, callable]] = [
             ("改用 IPv4", lambda: _extract_over_ipv4(opts, url)),
         ]
         if not self.impersonate and impersonation_available():
             attempts.append(("假扮成瀏覽器的 TLS 指紋",
                              lambda: _extract_impersonating(opts, url)))
+        # 擋住連線的很可能就是短網址那個網域本身（lnkd.in 在很多封鎖清單上）。
+        # 換成它指向的完整網址，就整個繞過去了。
+        if self.expander and is_short_url(url):
+            attempts.append(("把短網址換成完整網址",
+                             lambda: self._extract_expanded(opts, url)))
 
         for label, attempt in attempts:
             self._log(f"  連線被中斷，{label}，再試一次…")
@@ -138,6 +147,17 @@ class Downloader:
             if info is not None:
                 return info, failure
         return None, failure
+
+    def _extract_expanded(self, opts: dict, url: str):
+        """把短網址換成完整網址後再解析一次。"""
+        from yt_dlp import YoutubeDL
+
+        full = self.expander(url) if self.expander else ""
+        if not full:
+            return None
+        self._log(f"    → {full[:100]}")
+        with YoutubeDL(dict(opts)) as ydl:
+            return ydl.extract_info(full, download=False)
 
     # -- 展開網址 ---------------------------------------------------------
 

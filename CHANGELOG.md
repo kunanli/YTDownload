@@ -2,6 +2,42 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.15.0
+
+### 新增
+
+- **短網址展開**：連線被切斷且網址是 `lnkd.in`、`bit.ly` 這類轉址服務時，
+  換成它指向的完整網址再試一次
+  - `--expand` 不再詢問直接展開，`--no-expand` 永遠不用，`--expander-url` 可自架
+  - 跟微信的線上解析一樣：**送出網址前一定先問過**，且只送網址、不送 cookies
+- `doctor` 把短網址與完整網址**分開測**，結論會直接說是哪一種被擋
+- **缺相依時主動提醒並幫忙裝**：
+  - 選單一開啟就檢查 yt-dlp / mutagen / ffmpeg / curl_cffi，缺了就說明少掉什麼功能
+    並問要不要幫裝（必要的才主動問，選用的只列出來）
+  - ffmpeg 走 `winget`／`brew`；Linux 只給手動步驟（不替使用者提權）
+  - `下載.bat` 與 `下載.command` 在套件本身沒裝時自動 `pip install -e .`
+  - 非互動環境一律不裝，只印手動步驟
+
+### 說明：LinkedIn 為什麼一直失敗
+
+使用者裝上 `curl_cffi` 之後，假扮瀏覽器那招終於跑到了，但換成另一個錯：
+
+```
+curl: (35) TLS connect error: error:00000000:invalid library (0):OPENSSL_internal
+```
+
+這是 curl_cffi 在 Windows 上的已知問題（[yt-dlp#15385]、[curl_cffi#601]），
+兩個 issue 都還開著、沒有修法——那條路暫時是死的。
+
+回頭看才發現關鍵：**每一次失敗的都是 `lnkd.in` 短網址**，完整的 `linkedin.com`
+網址從頭到尾沒被測過。`lnkd.in` 是轉址網域，出現在大量追蹤器封鎖清單裡；
+這類封鎖看網域名稱就把連線切掉，症狀正是 `UNEXPECTED_EOF`。
+
+所以與其想辦法「連上 lnkd.in」，不如繞過它。
+
+[yt-dlp#15385]: https://github.com/yt-dlp/yt-dlp/issues/15385
+[curl_cffi#601]: https://github.com/lexiforest/curl_cffi/issues/601
+
 ## 1.14.0
 
 ### 新增

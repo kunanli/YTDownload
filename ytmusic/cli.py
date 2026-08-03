@@ -127,6 +127,11 @@ def _add_download_options(p) -> None:
     p.add_argument("--proxy", metavar="URL", help="HTTP/SOCKS 代理伺服器")
     p.add_argument("--impersonate", nargs="?", const="chrome", metavar="瀏覽器",
                    help="假扮成瀏覽器的 TLS 指紋（需要 curl_cffi），用於連線被無故切斷的站台")
+    p.add_argument("--expand", action="store_true",
+                   help="短網址連不上時，直接用線上服務展開成完整網址（不再詢問）")
+    p.add_argument("--no-expand", action="store_true",
+                   help="永遠不要展開短網址，也不要詢問")
+    p.add_argument("--expander-url", metavar="URL", help="自訂短網址展開服務")
     p.add_argument("--rate-limit", metavar="RATE", help="限速，例如 500K、1.5M")
     p.add_argument("--no-progress", action="store_true", help="關閉進度列，只輸出純文字")
     p.add_argument("-v", "--verbose", action="store_true",
@@ -524,6 +529,41 @@ def _build_config(args: argparse.Namespace) -> Config:
     )
 
 
+def _short_url_expander(urls: list[str], args: argparse.Namespace):
+    """準備好「連不上時把短網址換成完整網址」這一招，但先取得同意。
+
+    擋住連線的常常就是短網址那個網域本身（`lnkd.in` 在很多追蹤器封鎖清單上），
+    所以繞過它往往就通了——代價是得請第三方幫忙問出它指向哪裡。
+    """
+    from .shorturl import DEFAULT_EXPANDER, is_short_url
+
+    if getattr(args, "no_expand", False) or not any(is_short_url(u) for u in urls):
+        return None
+
+    service = getattr(args, "expander_url", None) or DEFAULT_EXPANDER
+    agreed = {"asked": False, "ok": bool(getattr(args, "expand", False))}
+
+    def expander(url: str) -> str:
+        from .shorturl import EXPANDER_NOTICE, expand
+
+        if not agreed["ok"]:
+            if agreed["asked"] or not sys.stdin.isatty():
+                return ""
+            agreed["asked"] = True
+            print(f"\n{EXPANDER_NOTICE.format(service=service)}", file=sys.stderr)
+            try:
+                answer = input("  要展開短網址再試一次嗎？ [Y/n] ").strip().lower()
+            except (EOFError, KeyboardInterrupt):
+                print(file=sys.stderr)
+                return ""
+            agreed["ok"] = answer in {"", "y", "yes", "要"}
+            if not agreed["ok"]:
+                return ""
+        return expand(url, service=service)
+
+    return expander
+
+
 def _langs(flag: str | None, config: Config) -> str | None:
     """--subs/--lyrics 沒帶語言時，改用設定檔裡的語言清單。"""
     if flag is None:
@@ -555,6 +595,7 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
                             verbose=args.verbose, video=args.video,
                             subs=_langs(args.subs, config),
                             lyrics=_langs(args.lyrics, config))
+    downloader.expander = _short_url_expander(urls, args)
 
     try:
         downloader.preflight()

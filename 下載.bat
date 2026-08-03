@@ -18,6 +18,25 @@ if not defined PY (
   exit /b 3
 )
 
+REM Everything else (ffmpeg, mutagen, curl_cffi) is checked inside the menu,
+REM which can print proper Chinese and ask before installing. Only the package
+REM itself has to be handled here: without it there is no menu to run.
+"%PY%" -c "import ytmusic" >nul 2>&1
+if errorlevel 1 (
+  echo.
+  echo   [SETUP] First run - installing ytmusic and its dependencies...
+  echo.
+  "%PY%" -m pip install -e .
+  if errorlevel 1 (
+    echo.
+    echo   [ERROR] Install failed. Try running this by hand:
+    echo       python -m pip install -e .
+    echo.
+    pause
+    exit /b 3
+  )
+)
+
 "%PY%" -m ytmusic menu
 if errorlevel 1 (
   echo.

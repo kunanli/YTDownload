@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.14.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.15.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -90,6 +90,8 @@
 | `[SSL: UNEXPECTED_EOF_WHILE_READING]` | [連線被切斷，不是影片的問題](#ssl-連線被切斷) |
 | 只有 LinkedIn 連不上，其他站台正常 | [裝 curl_cffi 假扮瀏覽器指紋](#只有-linkedin-這樣那多半是-tls-指紋) |
 | **不知道問題出在哪** | [`python -m ytmusic doctor "網址"`](#先跑-doctor-讓它告訴你問題在哪) |
+| 只有 `lnkd.in`／`bit.ly` 短網址連不上 | [短網址網域被擋，加 `--expand`](#短網址被擋住) |
+| `curl: (35) TLS connect error ... invalid library` | [curl_cffi 在 Windows 上的已知問題](#短網址被擋住) |
 
 ---
 

@@ -12,4 +12,21 @@ if ! command -v "$PY" >/dev/null 2>&1; then
   exit 3
 fi
 
+# Everything else (ffmpeg, mutagen, curl_cffi) is checked inside the menu,
+# which can print proper Chinese and ask before installing. Only the package
+# itself has to be handled here: without it there is no menu to run.
+if ! "$PY" -c "import ytmusic" >/dev/null 2>&1; then
+  echo
+  echo "  [SETUP] First run - installing ytmusic and its dependencies..."
+  echo
+  if ! "$PY" -m pip install -e .; then
+    echo
+    echo "  [ERROR] Install failed. Try running this by hand:"
+    echo "      python3 -m pip install -e ."
+    echo
+    read -r -p "  Press Enter to close…" _
+    exit 3
+  fi
+fi
+
 "$PY" -m ytmusic menu

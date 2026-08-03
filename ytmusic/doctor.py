@@ -135,20 +135,47 @@ def probe_url(url: str, config, *, out=None) -> list[Check]:
     # 設定檔可能已經固定了 impersonate，那會讓「一般連線」根本不是一般連線。
     base.pop("impersonate", None)
 
-    results: list[Check] = []
-    for name, why, extra in probes(config):
+    def attempt(name: str, target: str, extra: dict) -> Check:
         logger = _CollectingLogger()
-        opts = {**base, **extra, "logger": logger}
         print(f"  測試 {name}…", file=out, flush=True)
         try:
-            with YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+            with YoutubeDL({**base, **extra, "logger": logger}) as ydl:
+                info = ydl.extract_info(target, download=False)
         except Exception as exc:
-            results.append(Check(name, BAD, _short_error(exc, logger)[:110]))
-            continue
+            return Check(name, BAD, _short_error(exc, logger)[:110])
         title = (info or {}).get("title") or (info or {}).get("id") or "（沒有標題）"
-        results.append(Check(name, OK, f"讀得到：{title[:60]}"))
+        return Check(name, OK, f"讀得到：{title[:60]}")
+
+    results = [attempt(name, url, extra) for name, _, extra in probes(config)]
+
+    # 短網址本身被擋是很常見的情況（lnkd.in 在不少封鎖清單上），而它跟
+    # 「整個站台連不上」的處置完全不同——分開測才分得出來。
+    full = _expanded(url, out=out)
+    if full:
+        results.append(attempt("完整網址", full, {}))
     return results
+
+
+def _expanded(url: str, *, out) -> str:
+    """短網址就展開成完整網址（先徵得同意）。不是短網址就回空字串。"""
+    from .shorturl import EXPANDER_NOTICE, DEFAULT_EXPANDER, expand, short_host
+
+    host = short_host(url)
+    if not host:
+        return ""
+    print(f"\n  這是 {host} 短網址——它本身被擋的話，完整網址可能沒問題。",
+          file=out)
+    print(EXPANDER_NOTICE.format(service=DEFAULT_EXPANDER), file=out)
+    if not sys.stdin.isatty():
+        return ""
+    try:
+        if input("  要展開來一起測嗎？ [Y/n] ").strip().lower() not in {"", "y", "yes", "要"}:
+            return ""
+    except (EOFError, KeyboardInterrupt):
+        return ""
+    full = expand(url)
+    print(f"  → {full}" if full else "  展開失敗。", file=out)
+    return full
 
 
 def conclusion(results: list[Check]) -> str:
@@ -159,6 +186,12 @@ def conclusion(results: list[Check]) -> str:
     if not winners:
         return ("三種方式都連不上。這條網路到這個站台是不通的——"
                 "換個網路（手機熱點）再跑一次 doctor，就能確定是網路還是站台的問題。")
+    labels = {c.label for c in winners}
+    blocked_short = "完整網址" in labels and not (labels - {"完整網址"})
+    if blocked_short:
+        return ("只有完整網址通得了——被擋的是短網址那個網域本身，不是這個站台。\n"
+                "  下載時加 --expand 會自動換成完整網址，或自己在瀏覽器開一次短網址、"
+                "複製網址列那串長的。")
     first = winners[0].label
     if first == "一般連線":
         return "一般連線就通了。剛才的失敗多半是暫時的，直接重跑下載即可。"

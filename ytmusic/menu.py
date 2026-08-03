@@ -250,6 +250,8 @@ def run_menu(runner: Callable[[list[str]], int] | None = None, *,
     runner = runner or _default_runner
     ask = ask or _default_ask
 
+    _check_dependencies(ask, out)
+
     last = 0
     while True:
         print(render_menu(), file=out)
@@ -284,6 +286,22 @@ def run_menu(runner: Callable[[list[str]], int] | None = None, *,
             ask("  按 Enter 回到選單…")
         except (Cancelled, EOFError, KeyboardInterrupt):
             return last
+
+
+def _check_dependencies(ask: Callable[[str], str], out) -> None:
+    """開場先看缺什麼，缺了就問要不要幫忙裝。
+
+    雙擊啟動的人不會去看 README，也不該被要求看；缺東西時最糟的是等到下載到
+    一半才炸掉。沒缺的話這裡完全不會出聲。
+    """
+    from .installer import gaps, offer
+
+    try:
+        missing = gaps()
+    except Exception:
+        return  # 檢查本身出錯不該擋住整個選單
+    if missing:
+        offer(missing, ask=ask, out=out)
 
 
 def _default_ask(prompt: str) -> str:
