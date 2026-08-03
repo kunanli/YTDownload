@@ -2,6 +2,17 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.3.0
+
+### 新增
+
+- Facebook：公開影片與 Reels 直接貼網址即可（實測下載成功）
+- Instagram：貼文、Reels、限動可下載，但幾乎都要登入，需搭配
+  `--cookies-from-browser`
+
+README 的站台章節改成對照表，逐一標明各站台是「直接可用」還是「需登入」，
+並在快速查表補上 Instagram 未登入時的錯誤訊息。
+
 ## 1.2.0
 
 ### 新增

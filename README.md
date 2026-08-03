@@ -1,8 +1,8 @@
 # YTDownload
 
-**v1.2.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.3.0** ｜ [更新紀錄](CHANGELOG.md)
 
-把 YouTube、YouTube Music、Bilibili、Vimeo 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
+把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
 **完全不懂電腦也沒關係**，照著下面做就行。安裝只要做一次，大概 10 分鐘。
 
@@ -23,6 +23,8 @@
 | YouTube Music 的網址 | ✅ |
 | Bilibili（含搜尋、合集、收藏夾） | ✅ |
 | Vimeo | ✅ |
+| Facebook（影片、Reels） | ✅ 公開內容 |
+| Instagram（貼文、Reels、限動） | ✅ 需登入 |
 | LinkedIn（貼文影片、Learning） | ✅ 需登入 |
 | 微信視頻號 | ❌ [有替代工具](#微信視頻號) |
 
@@ -40,7 +42,8 @@
 | 找某個歌手的歌 | `python -m ytmusic search "歌手" -a` | [看這裡](#用歌手名稱找歌) |
 | 下載 Bilibili 影片 | `python -m ytmusic dl "B站網址"` | [看這裡](#bilibili) |
 | 在 Bilibili 搜尋 | `python -m ytmusic search "關鍵字" --site bilibili` | [看這裡](#bilibili) |
-| 下載 Vimeo / LinkedIn | `python -m ytmusic dl "網址"` | [看這裡](#vimeolinkedin-與其他站台) |
+| 下載 Vimeo / Facebook | `python -m ytmusic dl "網址"` | [看這裡](#vimeofacebookinstagram-與其他站台) |
+| 下載 Instagram / LinkedIn | `... --cookies-from-browser chrome` | [看這裡](#vimeofacebookinstagram-與其他站台) |
 | 下載整張播放清單 | `python -m ytmusic dl "網址" --playlist` | [看這裡](#下載整張播放清單) |
 | 每首歌收進清單資料夾 | 再加 `--playlist-folder` | [看這裡](#下載整張播放清單) |
 | 下載影片 | `python -m ytmusic dl "網址" --video 1080` | [看這裡](#下載影片) |
@@ -71,6 +74,7 @@
 | `'ytmusic' is not recognized` | [指令要用 `python -m` 開頭](#找不到-ytmusic-這個指令) |
 | `找不到 ffmpeg` | [裝 ffmpeg，裝完重開視窗](#找不到-ffmpeg) |
 | `Video unavailable` | [那支影片本身有問題](#video-unavailable影片無法使用) |
+| `Instagram sent an empty media response` | [Instagram 要登入](#vimeofacebookinstagram-與其他站台) |
 | `HTTP Error 403`、需要登入 | [要帶瀏覽器登入資訊](#http-error-403或需要登入) |
 | `HTTP Error 404`（`list=LM`） | [私人清單一定要登入](#我喜歡的音樂或私人清單下載不了) |
 | 雙擊 `.bat` 狂洗畫面 | [舊版問題，更新就好](#雙擊-下載bat-一直跳錯或狂洗畫面) |
@@ -149,7 +153,7 @@ python -m ytmusic menu
   - [Windows](#windows)　·　[macOS](#macos)
 - **[第二部分：開始下載](#第二部分開始下載)**
   - [用歌名搜尋](#用歌名搜尋)
-  - [Bilibili](#bilibili)　·　[Vimeo / LinkedIn](#vimeolinkedin-與其他站台)　·　[微信視頻號](#微信視頻號)
+  - [Bilibili](#bilibili)　·　[Vimeo / Facebook / Instagram](#vimeofacebookinstagram-與其他站台)　·　[微信視頻號](#微信視頻號)
   - [用歌手名稱找歌](#用歌手名稱找歌)
   - [下載一首歌](#下載一首歌)
   - [下載整張播放清單](#下載整張播放清單)
@@ -360,22 +364,32 @@ python -m ytmusic search "周杰倫" --site bilibili
 >
 > 需要登入才能看的影片（大會員、付費內容）加 `--cookies-from-browser chrome`。
 
-## Vimeo、LinkedIn 與其他站台
+## Vimeo、Facebook、Instagram 與其他站台
 
 **網址直接貼就好**，用法跟 YouTube 完全一樣：
 
 ```powershell
 python -m ytmusic dl "https://vimeo.com/76979871" --video 1080
-python -m ytmusic dl "https://www.linkedin.com/posts/..." --video 720
+python -m ytmusic dl "https://www.facebook.com/watch/?v=..." --video 720
+python -m ytmusic dl "https://www.instagram.com/reel/..." --cookies-from-browser chrome
 ```
 
-底層的 yt-dlp 支援 **1700 多個網站**，多數貼上網址就能用。上面列出的是實際驗過的。
+底層的 yt-dlp 支援 **1700 多個網站**，多數貼上網址就能用。
 
-> 💡 **Vimeo**：一般頁面要先換 OAuth token，某些網路環境會被回
-> `401 Unauthorized`。遇到時工具會**自動改用播放器網址重試**，你不用做任何事。
->
-> 💡 **LinkedIn**：多數貼文和 Learning 課程要登入才看得到，記得加
-> `--cookies-from-browser chrome`。
+### 各站台的注意事項
+
+| 站台 | 狀況 |
+| --- | --- |
+| **Vimeo** | 直接可用。一般頁面要先換 OAuth token，某些網路環境會被回 `401 Unauthorized`，遇到時工具會**自動改用播放器網址重試**，你不用做任何事 |
+| **Facebook** | **公開**影片與 Reels 直接可用；私人貼文、社團內容要加 `--cookies-from-browser` |
+| **Instagram** | **幾乎都要登入**。沒帶 cookies 會看到「Instagram sent an empty media response」，加 `--cookies-from-browser chrome` 即可 |
+| **LinkedIn** | 多數貼文和 Learning 課程要登入，同樣加 `--cookies-from-browser` |
+
+需要登入的站台，記得**先把該瀏覽器完全關掉**再執行，詳見
+[「HTTP Error 403」或「需要登入」](#http-error-403或需要登入)。
+
+> ⚠️ 這些平台上多數是**別人的個人內容**。下載前想一下你有沒有權利保存與再利用，
+> 詳見[使用須知](#使用須知)。
 
 ## 微信視頻號
 
