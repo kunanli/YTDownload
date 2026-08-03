@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.9.1** ｜ [更新紀錄](CHANGELOG.md)
+**v1.9.2** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -84,6 +84,7 @@
 | 想看完整錯誤訊息 | [指令後面加 `-v`](#我想看到底出了什麼事) |
 | `'playwright' is not recognized` | [要用 `python -m playwright`](#微信視頻號) |
 | LinkedIn「Copy video address」是灰的 | [要複製貼文網址](#linkedin-的影片網址怎麼複製) |
+| 選單裡貼上網址沒反應 | [Windows Terminal 按 Ctrl+V，舊版 PowerShell 按右鍵](#最簡單的用法雙擊啟動選單) |
 
 ---
 
@@ -142,6 +143,9 @@ Facebook… 工具看網址就認得出來。貼**微信視頻號**的網址也�
    可複選，用逗號分隔（例如 1,3）
   字幕語言（直接按 Enter = 全部）：1,3
 ```
+
+> 💡 **貼上沒反應？** Windows Terminal 按 `Ctrl+V`，舊版 PowerShell 按滑鼠**右鍵**。
+> 貼上落空時選單會再問一次，不會把你踢回主選單。
 
 **貼播放清單網址也可以**——選單會再問要不要整張下載、要不要收進獨立資料夾，
 所以「整張清單下載影片 + 指定字幕語言」在選單裡就做得到。

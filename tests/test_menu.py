@@ -3,8 +3,8 @@ import io
 import pytest
 
 from ytmusic.menu import (
-    LANGUAGE_CHOICES, MENU_ITEMS, Cancelled, ask_languages, ask_site,
-    build_command, render_menu, run_menu,
+    LANGUAGE_CHOICES, MENU_ITEMS, Cancelled, ask_languages, ask_required,
+    ask_site, build_command, render_menu, run_menu,
 )
 
 
@@ -39,8 +39,9 @@ class TestBuildCommand:
     def test_empty_choice_defaults_to_download(self):
         assert build_command("", Asker("https://youtu.be/a", ""))[0] == "dl"
 
-    def test_blank_url_cancels(self):
-        assert build_command("1", Asker("   ")) is None
+    def test_blank_url_retries_then_cancels(self):
+        # 貼上失敗時要能重貼，連續三次空白才放棄
+        assert build_command("1", Asker("   ", "", "")) is None
 
     def test_search_defaults_to_youtube(self):
         assert build_command("2", Asker("告白氣球", "")) == ["search", "告白氣球"]
@@ -62,7 +63,7 @@ class TestBuildCommand:
         ]
 
     def test_artist_blank_cancels(self):
-        assert build_command("3", Asker("  ")) is None
+        assert build_command("3", Asker("  ", "", "")) is None
 
     def test_video_defaults_to_720(self):
         assert build_command("4", Asker("https://youtu.be/a", "", "")) == [
@@ -159,7 +160,7 @@ class TestRunMenu:
         assert calls == [["history", "list"], ["history", "list"]]
 
     def test_blank_input_cancels_back_to_menu_without_running(self):
-        _, calls, _ = self._run("1", "", "0")
+        _, calls, _ = self._run("1", "", "", "", "0")
         assert calls == []
 
     def test_eof_ends_cleanly_instead_of_looping(self):
@@ -294,3 +295,39 @@ class TestAskSite:
         asker = Asker("")
         ask_site(asker)
         assert "YouTube" in asker.prompts[0] and "Bilibili" in asker.prompts[0]
+
+
+class TestAskRequired:
+    """使用者回報「貼上功能失效」：選了項目、貼上網址，卻立刻跳回選單。
+
+    不論根因是貼上沒進去還是內容夾帶換行，一收到空值就踢回選單都是錯的——
+    連重貼的機會都沒有。
+    """
+
+    def test_returns_first_non_empty(self):
+        assert ask_required(Asker("https://x/1"), "p") == "https://x/1"
+
+    def test_retries_after_blank(self):
+        assert ask_required(Asker("", "  ", "https://x/2"), "p") == "https://x/2"
+
+    def test_gives_up_after_three_blanks(self):
+        assert ask_required(Asker("", "", ""), "p") == ""
+
+    def test_q_cancels_immediately(self):
+        assert ask_required(Asker("q"), "p") == ""
+        assert ask_required(Asker("取消"), "p") == ""
+
+    def test_retry_prompt_explains_how_to_paste(self):
+        asker = Asker("", "https://x/3")
+        ask_required(asker, "p")
+        assert "Ctrl+V" in asker.prompts[1]
+        assert "右鍵" in asker.prompts[1]
+
+    def test_strips_whitespace(self):
+        assert ask_required(Asker("  https://x/4  "), "p") == "https://x/4"
+
+    def test_menu_lets_user_retry_a_failed_paste(self):
+        # 第一次貼上落空，第二次成功——不該中途跳回選單
+        assert build_command("4", Asker("", "https://youtu.be/a", "", "")) == [
+            "dl", "https://youtu.be/a", "--video", "720"
+        ]

@@ -28,6 +28,25 @@ LANGUAGE_CHOICES = (
 YES = {"y", "yes", "要", "1"}
 
 
+PASTE_HINT = ("（貼上：Windows Terminal 按 Ctrl+V，舊版 PowerShell 按滑鼠右鍵；"
+              "不想繼續請輸入 q）")
+
+
+def ask_required(ask: Callable[[str], str], prompt: str, *, tries: int = 3) -> str:
+    """要一個非空的輸入，空白就再問一次。
+
+    貼上失敗、或貼到的內容夾帶換行時，使用者會送出空字串。原本一收到空值就
+    踢回選單，等於連重貼的機會都沒有——重問才是對的。
+    """
+    for attempt in range(tries):
+        answer = ask(prompt).strip()
+        if answer:
+            return "" if answer.lower() in {"q", "quit", "取消"} else answer
+        if attempt < tries - 1:
+            prompt = f"  沒有讀到任何內容，再試一次。\n  {PASTE_HINT}\n{prompt}"
+    return ""
+
+
 def ask_yes(ask: Callable[[str], str], question: str) -> bool:
     return ask(f"  {question}[y/Enter=不用] ").strip().lower() in YES
 
@@ -114,7 +133,7 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
     choice = (choice or "1").strip()
 
     if choice == "1":
-        url = ask("  貼上網址後按 Enter：").strip()
+        url = ask_required(ask, "  貼上網址後按 Enter：")
         if not url:
             return None
         if redirect := _wechat_redirect(url, ask):
@@ -125,17 +144,17 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         return command + _playlist_flags(url, ask)
 
     if choice == "2":
-        keyword = ask("  要找什麼歌？ ").strip()
+        keyword = ask_required(ask, "  要找什麼歌？ ")
         return ["search", keyword] + ask_site(ask) if keyword else None
 
     if choice == "3":
-        artist = ask("  歌手名稱？ ").strip()
+        artist = ask_required(ask, "  歌手名稱？ ")
         if not artist:
             return None
         return ["search", "--artist", artist] + ask_site(ask)
 
     if choice == "4":
-        url = ask("  貼上網址後按 Enter：").strip()
+        url = ask_required(ask, "  貼上網址後按 Enter：")
         if not url:
             return None
         if redirect := _wechat_redirect(url, ask):
@@ -160,7 +179,7 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         return ["history", "list"]
 
     if choice == "8":
-        url = ask("  貼上播放清單網址：").strip()
+        url = ask_required(ask, "  貼上播放清單網址：")
         if not url:
             return None
         name = ask("  取個名字（可直接按 Enter 跳過）：").strip()
