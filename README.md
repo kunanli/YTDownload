@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.3.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.4.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -26,7 +26,7 @@
 | Facebook（影片、Reels） | ✅ 公開內容 |
 | Instagram（貼文、Reels、限動） | ✅ 需登入 |
 | LinkedIn（貼文影片、Learning） | ✅ 需登入 |
-| 微信視頻號 | ❌ [有替代工具](#微信視頻號) |
+| 微信視頻號 | ⚠️ [瀏覽器模式](#微信視頻號) |
 
 ---
 
@@ -44,6 +44,7 @@
 | 在 Bilibili 搜尋 | `python -m ytmusic search "關鍵字" --site bilibili` | [看這裡](#bilibili) |
 | 下載 Vimeo / Facebook | `python -m ytmusic dl "網址"` | [看這裡](#vimeofacebookinstagram-與其他站台) |
 | 下載 Instagram / LinkedIn | `... --cookies-from-browser chrome` | [看這裡](#vimeofacebookinstagram-與其他站台) |
+| 下載微信視頻號 | `python -m ytmusic wechat "網址"` | [看這裡](#微信視頻號) |
 | 下載整張播放清單 | `python -m ytmusic dl "網址" --playlist` | [看這裡](#下載整張播放清單) |
 | 每首歌收進清單資料夾 | 再加 `--playlist-folder` | [看這裡](#下載整張播放清單) |
 | 下載影片 | `python -m ytmusic dl "網址" --video 1080` | [看這裡](#下載影片) |
@@ -393,42 +394,67 @@ python -m ytmusic dl "https://www.instagram.com/reel/..." --cookies-from-browser
 
 ## 微信視頻號
 
-**這個工具不支援，但有別的工具做得到** —— 原因值得說清楚。
+微信視頻號的分享連結**沒辦法直接解析** —— 分享頁只是一層 JS 外殼（實測整頁只有
+2.5 KB），影片位址要等頁面自己去換才拿得到。
 
-微信視頻號（`channels.weixin.qq.com`）的影片網址**沒辦法從分享連結推導出來**：
+所以這裡走的是另一條路：**開一個真正的瀏覽器把頁面載入，攔截頁面自己發出的請求**。
 
-- 分享頁只是一層 JS 外殼（實測整頁只有 2.5 KB），裡面沒有任何影片位址
-- 真正的影片位址要靠微信客戶端帶著簽章與 session token 去換，而且串流是加密的
-- yt-dlp 支援 1752 個網站，**沒有任何一個對應微信視頻號**
+```powershell
+pip install playwright
+playwright install chromium
 
-所以「貼上網址就下載」這條路走不通，而本工具整個設計就是建立在這條路上。
+python -m ytmusic wechat "https://weixin.qq.com/sph/XXXXXXXX"
+```
 
-### 那要用什麼
+會跳出一個瀏覽器視窗：
 
-有兩款工具做得到，做法都是**攔截流量**而不是解析網址：
+1. 若出現 QR code，用**手機微信掃碼登入**（只需一次，登入狀態會存起來）
+2. 讓影片開始播放
+3. 抓到影片就會自動下載並關閉視窗
 
-| 工具 | 特點 |
+登入過之後可以加 `--headless` 不顯示視窗：
+
+```powershell
+python -m ytmusic wechat "網址" --headless
+```
+
+其他選項：
+
+| 選項 | 說明 |
 | --- | --- |
-| [wx_video_download](https://github.com/qiye45/wx_video_download) | 把「下載」按鈕直接注入微信的播放頁面，正常瀏覽時點一下就存檔；支援 Windows / macOS / Linux |
-| [wechatvideodownload](https://github.com/qiye45/wechatvideodownload) | 獨立視窗操作，需自行按「開始監聽」與「解密」 |
+| `-o DIR` | 輸出資料夾 |
+| `--timeout 秒` | 最多等多久（預設 120） |
+| `--headless` | 不顯示視窗（要先登入過） |
+| `--keep-broken` | 即使抓到的檔案看起來不能播也保留 |
 
-兩者的共同步驟都是：
-
-1. 以系統管理員身分執行，安裝它的根憑證
-2. 啟動本機代理（攔截流量）
-3. **開著微信、手動播放那支影片**
-4. 工具從流量裡截下影片
-
-卡在**第 3 步**：必須有人真的去播放，這件事無法自動化，也沒辦法塞進
-`python -m ytmusic dl <網址>` 這種用法裡。硬要整合，等於在音樂下載器裡塞進
-一整套代理與憑證安裝流程，最後還是得你手動操作。
-
-> ⚠️ 這兩款都需要在電腦上**安裝根憑證並代理自己的網路流量**。這是它們能運作的
-> 前提，但也代表安裝期間所有 HTTPS 流量都會經過它。要不要接受這個代價由你評估。
+> ### ✅ 為什麼這個做法比較好
 >
-> **用完務必還原**：停掉代理程式 → `Win+R` 執行 `certmgr.msc`，在「受信任的
-> 根憑證授權單位」裡刪掉它裝的憑證（例如 SunnyNet）→ 刪掉程式資料夾。
-> 若關掉後瀏覽器連不上網，到系統設定把「使用 Proxy 伺服器」關掉。
+> 網路上的微信下載工具（`wx_video_download`、`wechatvideodownload`）都是攔截
+> **整台電腦**的流量，需要**安裝根憑證**才能解開 HTTPS。那等於讓一個程式看得到
+> 你所有的加密連線。
+>
+> 這裡的做法只看瀏覽器自己的請求，**不用裝任何憑證、不動你的系統網路設定**。
+
+> ### ⚠️ 老實說：這條路我沒能完整驗證
+>
+> 開發環境沒有微信帳號，也連不上微信，所以**掃碼登入與視頻號頁面本身沒測過**。
+>
+> 已經驗過的是：瀏覽器啟動、頁面載入、請求攔截、來源挑選、下載、檔案格式檢查
+> （用本機伺服器完整跑過，正確攔到 6.4 MB 的 `video/mp4` 並下載成功）。
+>
+> 如果抓到的檔案不是可播放的影片，工具會**明確告訴你並刪除**，不會留下打不開的
+> 檔案。遇到問題請把畫面貼給我。
+
+> ### 還是不行的話
+>
+> 微信客戶端的串流是加密的（實測：前 128 KB 被處理過，其餘是明文）。如果瀏覽器
+> 這條路拿到的也是加密內容，就只能改用
+> [wx_video_download](https://github.com/qiye45/wx_video_download)——它攔截客戶端
+> 流量並解密，但需要安裝根憑證、開著微信手動播放。
+>
+> **用完務必還原**：停掉代理程式 → `Win+R` 執行 `certmgr.msc`，在「受信任的根憑證
+> 授權單位」裡刪掉它裝的憑證（例如 SunnyNet）→ 刪掉程式資料夾。若關掉後瀏覽器連不上
+> 網，到系統設定把「使用 Proxy 伺服器」關掉。
 
 ## 用歌手名稱找歌
 

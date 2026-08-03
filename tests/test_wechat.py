@@ -1,0 +1,136 @@
+import pytest
+
+from ytmusic.wechat import (
+    CaptureResult, MediaCandidate, is_wechat_url, looks_like_media,
+    looks_like_playable_video, pick_best_media, suggest_filename,
+)
+
+
+class TestIsWechatUrl:
+    def test_share_short_link(self):
+        assert is_wechat_url("https://weixin.qq.com/sph/AJq0mgzYC0")
+
+    def test_channels_page(self):
+        assert is_wechat_url(
+            "https://channels.weixin.qq.com/finder-preview/pages/sph?id=AJq0mgzYC0"
+        )
+
+    def test_case_insensitive(self):
+        assert is_wechat_url("HTTPS://WEIXIN.QQ.COM/SPH/ABC")
+
+    def test_wechat_article_is_not_a_channel(self):
+        # 公眾號文章不是視頻號，不該被這個指令接手
+        assert not is_wechat_url("https://mp.weixin.qq.com/s/abcdefg")
+
+    def test_other_sites(self):
+        assert not is_wechat_url("https://youtu.be/abc")
+        assert not is_wechat_url("https://www.bilibili.com/video/BV1")
+
+    def test_rejects_non_http(self):
+        assert not is_wechat_url("weixin.qq.com/sph/abc")
+        assert not is_wechat_url("")
+
+
+class TestLooksLikeMedia:
+    @pytest.mark.parametrize("url", [
+        "https://example.com/a.mp4",
+        "https://example.com/a.m3u8?token=1",
+        "https://example.com/seg.ts",
+        "https://example.com/a.MP4",
+    ])
+    def test_by_extension(self, url):
+        assert looks_like_media(url)
+
+    def test_by_content_type(self):
+        assert looks_like_media("https://example.com/stream", "video/mp4")
+        assert looks_like_media("https://example.com/x", "application/x-mpegURL")
+
+    def test_by_tencent_media_host(self):
+        assert looks_like_media("https://finder.video.qq.com/251/abcdef")
+
+    def test_plain_page_is_not_media(self):
+        assert not looks_like_media("https://channels.weixin.qq.com/page", "text/html")
+
+    def test_image_is_not_media(self):
+        assert not looks_like_media("https://example.com/cover.jpg", "image/jpeg")
+
+    def test_rejects_non_http(self):
+        assert not looks_like_media("blob:https://example.com/abc")
+        assert not looks_like_media("")
+
+
+class TestPickBestMedia:
+    def test_prefers_tencent_cdn_over_bigger_file(self):
+        others = MediaCandidate("https://other.com/big.mp4", size=99_000_000)
+        cdn = MediaCandidate("https://finder.video.qq.com/a", size=1000,
+                             from_media_host=True)
+        assert pick_best_media([others, cdn]) is cdn
+
+    def test_prefers_larger_among_same_host(self):
+        small = MediaCandidate("https://finder.video.qq.com/a", size=1000,
+                               from_media_host=True)
+        big = MediaCandidate("https://finder.video.qq.com/b", size=9_000_000,
+                             from_media_host=True)
+        assert pick_best_media([small, big]) is big
+
+    def test_prefers_mp4_over_playlist_when_tied(self):
+        playlist = MediaCandidate("https://x.com/a.m3u8", size=0)
+        direct = MediaCandidate("https://x.com/a.mp4", size=0)
+        assert pick_best_media([playlist, direct]) is direct
+
+    def test_empty(self):
+        assert pick_best_media([]) is None
+
+    def test_ignores_blank_urls(self):
+        assert pick_best_media([MediaCandidate("")]) is None
+
+    def test_capture_result_exposes_best(self):
+        result = CaptureResult(candidates=[
+            MediaCandidate("https://x.com/small.mp4", size=10),
+            MediaCandidate("https://x.com/big.mp4", size=999),
+        ])
+        assert result.best.url.endswith("big.mp4")
+
+
+class TestLooksLikePlayableVideo:
+    def test_mp4(self):
+        assert looks_like_playable_video(b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00")
+
+    def test_flv(self):
+        assert looks_like_playable_video(b"FLV\x01\x05\x00\x00\x00\x09")
+
+    def test_webm(self):
+        assert looks_like_playable_video(b"\x1aE\xdf\xa3\x01\x00\x00\x00")
+
+    def test_hls_playlist(self):
+        assert looks_like_playable_video(b"#EXTM3U\n#EXT-X-VERSION:3")
+
+    def test_encrypted_wechat_stream_is_rejected(self):
+        # 微信客戶端的加密串流開頭是亂數，不是 ftyp——正是要擋掉的東西
+        assert not looks_like_playable_video(
+            bytes.fromhex("b02eabd737ffe748d199224e411178c9")
+        )
+
+    def test_html_error_page_is_rejected(self):
+        assert not looks_like_playable_video(b"<!DOCTYPE html><html>")
+
+    def test_too_short(self):
+        assert not looks_like_playable_video(b"ftyp")
+        assert not looks_like_playable_video(b"")
+
+
+class TestSuggestFilename:
+    def test_author_and_title(self):
+        assert suggest_filename("小貓什麼時候上來的呢", "喵星人") == "喵星人 - 小貓什麼時候上來的呢"
+
+    def test_title_only(self):
+        assert suggest_filename("標題", "") == "標題"
+
+    def test_author_only(self):
+        assert suggest_filename("", "作者") == "作者"
+
+    def test_both_empty_gets_placeholder(self):
+        assert suggest_filename("", "") == "wechat-video"
+
+    def test_illegal_characters_are_sanitised(self):
+        assert suggest_filename("a/b:c", "d?e") == "d_e - a_b_c"

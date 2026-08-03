@@ -55,6 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_download_parser(sub)
     _add_search_parser(sub)
     _add_sync_parser(sub)
+    _add_wechat_parser(sub)
     _add_history_parser(sub)
     _add_config_parser(sub)
     return parser
@@ -179,6 +180,84 @@ def _add_sync_parser(sub) -> None:
     # 直接打 `ytmusic sync` 就等於 `ytmusic sync run`
     _add_download_options(p)
     p.set_defaults(func=cmd_sync_run, action="run", names=[])
+
+
+def _add_wechat_parser(sub) -> None:
+    p = sub.add_parser(
+        "wechat", aliases=["wx"], help="下載微信視頻號（會開瀏覽器）",
+        description="微信視頻號的網址沒辦法直接解析，這個指令會開一個瀏覽器把頁面"
+                    "載入，攔截頁面自己發出的請求來取得影片。第一次要掃碼登入。",
+    )
+    p.add_argument("url", metavar="URL", help="視頻號網址")
+    p.add_argument("-o", "--output", metavar="DIR", help="輸出資料夾")
+    p.add_argument("--timeout", type=int, default=120, metavar="秒",
+                   help="最多等多久（預設 120 秒）")
+    p.add_argument("--headless", action="store_true",
+                   help="不顯示瀏覽器視窗（已登入過才能用，第一次登入需要看得到畫面）")
+    p.add_argument("--keep-broken", action="store_true",
+                   help="即使抓到的檔案看起來不能播也保留下來")
+    p.set_defaults(func=cmd_wechat)
+
+
+def cmd_wechat(args: argparse.Namespace) -> int:
+    from .browser import BrowserUnavailable, capture_media, profile_dir
+    from .wechat import (
+        ENCRYPTED_HINT, download_media, is_wechat_url, looks_like_playable_video,
+        suggest_filename,
+    )
+
+    if not is_wechat_url(args.url):
+        print("這看起來不是微信視頻號的網址。一般網址請用 `ytmusic dl`。",
+              file=sys.stderr)
+        return EXIT_USAGE
+
+    config = Config.load()
+    output_dir = Path(args.output).expanduser() if args.output else config.output_dir
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        result = capture_media(args.url, timeout=args.timeout, headless=args.headless)
+    except BrowserUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        return EXIT_PRECONDITION
+    except KeyboardInterrupt:
+        print("\n已中斷。", file=sys.stderr)
+        return EXIT_INTERRUPTED
+
+    best = result.best
+    if best is None:
+        print(f"沒有攔截到影片。可能是還沒登入、影片沒開始播放，或微信改了做法。\n"
+              f"登入狀態存在：{profile_dir()}", file=sys.stderr)
+        return EXIT_PRECONDITION
+
+    stem = suggest_filename(result.title, result.author)
+    target = output_dir / f"{stem}.mp4"
+    print(f"\n找到影片，開始下載 → {target.name}", file=sys.stderr)
+
+    def show(done: int, total: int) -> None:
+        if total:
+            print(f"\r  {human_size(done)} / {human_size(total)}"
+                  f"  ({done * 100 // total}%)", end="", file=sys.stderr)
+
+    try:
+        written = download_media(best, target, cookies=result.cookies,
+                                 referer=args.url, progress=show)
+    except Exception as exc:
+        print(f"\n下載失敗：{str(exc)[:150]}", file=sys.stderr)
+        return EXIT_FAILED
+    print(file=sys.stderr)
+
+    with open(target, "rb") as handle:
+        head = handle.read(16)
+    if not looks_like_playable_video(head):
+        print(f"\n⚠ {ENCRYPTED_HINT}", file=sys.stderr)
+        if not args.keep_broken:
+            target.unlink(missing_ok=True)
+            print("\n（檔案已刪除，要保留請加 --keep-broken）", file=sys.stderr)
+            return EXIT_FAILED
+
+    print(f"\n完成　{human_size(written)}　→ {target}", file=sys.stderr)
+    return EXIT_OK
 
 
 def _add_history_parser(sub) -> None:
