@@ -1,8 +1,8 @@
 # YTDownload
 
-**v1.1.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.2.0** ｜ [更新紀錄](CHANGELOG.md)
 
-把 YouTube、YouTube Music 和 Bilibili 的東西下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
+把 YouTube、YouTube Music、Bilibili、Vimeo 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
 **完全不懂電腦也沒關係**，照著下面做就行。安裝只要做一次，大概 10 分鐘。
 
@@ -22,6 +22,8 @@
 | 用歌手名稱找歌 | ✅ |
 | YouTube Music 的網址 | ✅ |
 | Bilibili（含搜尋、合集、收藏夾） | ✅ |
+| Vimeo | ✅ |
+| LinkedIn（貼文影片、Learning） | ✅ 需登入 |
 | 微信視頻號 | ❌ [有替代工具](#微信視頻號) |
 
 ---
@@ -38,6 +40,7 @@
 | 找某個歌手的歌 | `python -m ytmusic search "歌手" -a` | [看這裡](#用歌手名稱找歌) |
 | 下載 Bilibili 影片 | `python -m ytmusic dl "B站網址"` | [看這裡](#bilibili) |
 | 在 Bilibili 搜尋 | `python -m ytmusic search "關鍵字" --site bilibili` | [看這裡](#bilibili) |
+| 下載 Vimeo / LinkedIn | `python -m ytmusic dl "網址"` | [看這裡](#vimeolinkedin-與其他站台) |
 | 下載整張播放清單 | `python -m ytmusic dl "網址" --playlist` | [看這裡](#下載整張播放清單) |
 | 每首歌收進清單資料夾 | 再加 `--playlist-folder` | [看這裡](#下載整張播放清單) |
 | 下載影片 | `python -m ytmusic dl "網址" --video 1080` | [看這裡](#下載影片) |
@@ -146,7 +149,7 @@ python -m ytmusic menu
   - [Windows](#windows)　·　[macOS](#macos)
 - **[第二部分：開始下載](#第二部分開始下載)**
   - [用歌名搜尋](#用歌名搜尋)
-  - [Bilibili](#bilibili)　·　[微信視頻號](#微信視頻號)
+  - [Bilibili](#bilibili)　·　[Vimeo / LinkedIn](#vimeolinkedin-與其他站台)　·　[微信視頻號](#微信視頻號)
   - [用歌手名稱找歌](#用歌手名稱找歌)
   - [下載一首歌](#下載一首歌)
   - [下載整張播放清單](#下載整張播放清單)
@@ -357,6 +360,23 @@ python -m ytmusic search "周杰倫" --site bilibili
 >
 > 需要登入才能看的影片（大會員、付費內容）加 `--cookies-from-browser chrome`。
 
+## Vimeo、LinkedIn 與其他站台
+
+**網址直接貼就好**，用法跟 YouTube 完全一樣：
+
+```powershell
+python -m ytmusic dl "https://vimeo.com/76979871" --video 1080
+python -m ytmusic dl "https://www.linkedin.com/posts/..." --video 720
+```
+
+底層的 yt-dlp 支援 **1700 多個網站**，多數貼上網址就能用。上面列出的是實際驗過的。
+
+> 💡 **Vimeo**：一般頁面要先換 OAuth token，某些網路環境會被回
+> `401 Unauthorized`。遇到時工具會**自動改用播放器網址重試**，你不用做任何事。
+>
+> 💡 **LinkedIn**：多數貼文和 Learning 課程要登入才看得到，記得加
+> `--cookies-from-browser chrome`。
+
 ## 微信視頻號
 
 **這個工具不支援，但有別的工具做得到** —— 原因值得說清楚。
@@ -371,20 +391,30 @@ python -m ytmusic search "周杰倫" --site bilibili
 
 ### 那要用什麼
 
-[qiye45/wechatvideodownload](https://github.com/qiye45/wechatvideodownload)
-可以做到，做法是**攔截流量**而不是解析網址：
+有兩款工具做得到，做法都是**攔截流量**而不是解析網址：
 
-1. 安裝它的根憑證
-2. 啟動監聽（底層是 mitmproxy）
+| 工具 | 特點 |
+| --- | --- |
+| [wx_video_download](https://github.com/qiye45/wx_video_download) | 把「下載」按鈕直接注入微信的播放頁面，正常瀏覽時點一下就存檔；支援 Windows / macOS / Linux |
+| [wechatvideodownload](https://github.com/qiye45/wechatvideodownload) | 獨立視窗操作，需自行按「開始監聽」與「解密」 |
+
+兩者的共同步驟都是：
+
+1. 以系統管理員身分執行，安裝它的根憑證
+2. 啟動本機代理（攔截流量）
 3. **開著微信、手動播放那支影片**
-4. 工具從流量裡截下影片，再按「解密」解開加密串流
+4. 工具從流量裡截下影片
 
-因為第 3 步必須有人真的去播放，這件事無法自動化，也沒辦法塞進
-`python -m ytmusic dl <網址>` 這種用法裡。
+卡在**第 3 步**：必須有人真的去播放，這件事無法自動化，也沒辦法塞進
+`python -m ytmusic dl <網址>` 這種用法裡。硬要整合，等於在音樂下載器裡塞進
+一整套代理與憑證安裝流程，最後還是得你手動操作。
 
-> ⚠️ 那個工具需要你在電腦上**安裝根憑證並代理自己的網路流量**。這是它能運作的
-> 前提，但也代表安裝期間所有 HTTPS 流量都會經過它。要不要接受這個代價，
-> 你自己評估；用完記得把憑證移除、關掉代理。
+> ⚠️ 這兩款都需要在電腦上**安裝根憑證並代理自己的網路流量**。這是它們能運作的
+> 前提，但也代表安裝期間所有 HTTPS 流量都會經過它。要不要接受這個代價由你評估。
+>
+> **用完務必還原**：停掉代理程式 → `Win+R` 執行 `certmgr.msc`，在「受信任的
+> 根憑證授權單位」裡刪掉它裝的憑證（例如 SunnyNet）→ 刪掉程式資料夾。
+> 若關掉後瀏覽器連不上網，到系統設定把「使用 Proxy 伺服器」關掉。
 
 ## 用歌手名稱找歌
 

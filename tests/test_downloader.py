@@ -2,8 +2,8 @@ from pathlib import Path
 
 from ytmusic.config import Config
 from ytmusic.downloader import (
-    Downloader, Track, _CollectingLogger, _final_path, _parse_rate, _rename_from_meta,
-    _short_error, _unique_path, _walk,
+    Downloader, Track, _CollectingLogger, _fallback_url, _final_path, _parse_rate,
+    _rename_from_meta, _short_error, _unique_path, _walk,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -320,3 +320,24 @@ class TestPreflight:
         target = tmp_path / "nested" / "out"
         Downloader(Config(output_dir=target, convert=False)).preflight()
         assert target.is_dir()
+
+
+class TestFallbackUrl:
+    def test_vimeo_oauth_failure_falls_back_to_player(self):
+        exc = Exception("[vimeo] 76979871: Failed to fetch macos OAuth token: "
+                        "HTTP Error 401: Unauthorized")
+        assert _fallback_url("https://vimeo.com/76979871", exc) == (
+            "https://player.vimeo.com/video/76979871"
+        )
+
+    def test_other_vimeo_errors_are_not_retried(self):
+        exc = Exception("[vimeo] 123: Video unavailable")
+        assert _fallback_url("https://vimeo.com/123", exc) is None
+
+    def test_non_vimeo_errors_are_not_retried(self):
+        exc = Exception("[youtube] abc: Sign in to confirm you're not a bot")
+        assert _fallback_url("https://youtu.be/abc", exc) is None
+
+    def test_player_url_has_no_further_fallback(self):
+        exc = Exception("[vimeo] 123: OAuth 401")
+        assert _fallback_url("https://player.vimeo.com/video/123", exc) is None

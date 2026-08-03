@@ -3,7 +3,7 @@ import pytest
 from ytmusic.utils import (
     classify_url, clean_title, display_width, human_size, human_time,
     is_radio_playlist, pad_display, parse_browser_spec, sanitize_filename,
-    split_artist_title, strip_topic, truncate,
+    split_artist_title, strip_topic, truncate, vimeo_player_url,
 )
 
 
@@ -243,3 +243,36 @@ class TestPadDisplay:
 
     def test_no_padding_when_already_wide_enough(self):
         assert pad_display("abcdef", 3) == "abcdef"
+
+
+class TestVimeoPlayerUrl:
+    def test_plain_video_url(self):
+        assert vimeo_player_url("https://vimeo.com/76979871") == (
+            "https://player.vimeo.com/video/76979871"
+        )
+
+    def test_www_prefix(self):
+        assert vimeo_player_url("https://www.vimeo.com/123").endswith("/video/123")
+
+    def test_trailing_slash_and_query(self):
+        assert vimeo_player_url("https://vimeo.com/123/?foo=bar") == (
+            "https://player.vimeo.com/video/123"
+        )
+
+    def test_unlisted_hash_is_preserved(self):
+        # 未公開影片少了雜湊就會變成無權觀看
+        assert vimeo_player_url("https://vimeo.com/123/abc123def") == (
+            "https://player.vimeo.com/video/123?h=abc123def"
+        )
+
+    def test_already_a_player_url_returns_none(self):
+        assert vimeo_player_url("https://player.vimeo.com/video/123") is None
+
+    def test_non_vimeo_returns_none(self):
+        assert vimeo_player_url("https://youtu.be/abc") is None
+
+    def test_channel_url_returns_none(self):
+        assert vimeo_player_url("https://vimeo.com/channels/staffpicks") is None
+
+    def test_empty(self):
+        assert vimeo_player_url("") is None

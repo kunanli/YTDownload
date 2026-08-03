@@ -244,6 +244,28 @@ def is_radio_playlist(url: str) -> bool:
     return any(value.startswith("RD") for value in params.get("list", []))
 
 
+_VIMEO_RE = re.compile(
+    r"^https?://(?:www\.)?vimeo\.com/(?P<id>\d+)(?P<hash>/[0-9a-f]+)?/?(?:[?#].*)?$",
+    re.IGNORECASE,
+)
+
+
+def vimeo_player_url(url: str) -> str | None:
+    """把 ``vimeo.com/<id>`` 轉成 ``player.vimeo.com/video/<id>``。
+
+    Vimeo 的一般頁面要先換 OAuth token，某些網路環境會被回 401；改走播放器
+    網址就不需要那道手續。無法轉換時回傳 None。
+    """
+    match = _VIMEO_RE.match((url or "").strip())
+    if not match:
+        return None
+    player = f"https://player.vimeo.com/video/{match.group('id')}"
+    unlisted = match.group("hash")
+    if unlisted:  # 未公開影片的雜湊要保留，否則會變成無權觀看
+        player += f"?h={unlisted.lstrip('/')}"
+    return player
+
+
 def find_ffmpeg() -> str | None:
     """回傳 ffmpeg 可執行檔路徑，找不到則回傳 None。"""
     return shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")

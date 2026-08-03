@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ytmusic"
-version = "1.1.0"
+version = "1.2.0"
 description = "YouTube 音樂下載器：下載音訊、轉檔、寫入標籤與封面，並記錄下載歷史"
 readme = "README.md"
 requires-python = ">=3.9"

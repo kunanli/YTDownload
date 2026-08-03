@@ -15,7 +15,10 @@ from .tagger import (
     TaggingError, TrackMeta, apply_tags, build_metadata, fetch_cover,
     pick_thumbnail_url,
 )
-from .utils import FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filename
+from .utils import (
+    FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filename,
+    vimeo_player_url,
+)
 
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
 _BEST_VBR = "0"
@@ -136,8 +139,17 @@ class Downloader:
                 try:
                     info = ydl.extract_info(url, download=False)
                 except Exception as exc:
-                    self._log(f"✖ 無法讀取 {url}：{_short_error(exc, logger)}")
-                    continue
+                    fallback = _fallback_url(url, exc)
+                    if fallback:
+                        try:
+                            info = ydl.extract_info(fallback, download=False)
+                        except Exception as retry_exc:
+                            self._log(f"✖ 無法讀取 {url}："
+                                      f"{_short_error(retry_exc, logger)}")
+                            continue
+                    else:
+                        self._log(f"✖ 無法讀取 {url}：{_short_error(exc, logger)}")
+                        continue
                 if info is None:
                     self._log(f"✖ 無法讀取 {url}")
                     continue
@@ -617,6 +629,18 @@ def _parse_rate(value: str) -> int | None:
 
 
 _SUBTITLE_ERROR_MARKERS = ("subtitle", "字幕")
+
+
+def _fallback_url(url: str, exc: Exception) -> str | None:
+    """某些站台換條路就能通，這裡回傳可以重試的替代網址。
+
+    目前只處理 Vimeo：一般頁面要先換 OAuth token，部分網路環境會被回 401，
+    改用播放器網址就不必經過那道手續。
+    """
+    message = str(exc).lower()
+    if "vimeo" in message and ("oauth" in message or "401" in message):
+        return vimeo_player_url(url)
+    return None
 
 
 def _is_subtitle_error(exc: Exception) -> bool:
