@@ -3,7 +3,7 @@ import pytest
 from ytmusic.utils import (
     classify_url, clean_title, display_width, human_size, human_time,
     is_radio_playlist, pad_display, parse_browser_spec, sanitize_filename,
-    split_artist_title, strip_topic, truncate, vimeo_player_url,
+    split_artist_title, strip_ansi, strip_topic, truncate, vimeo_player_url,
 )
 
 
@@ -276,3 +276,22 @@ class TestVimeoPlayerUrl:
 
     def test_empty(self):
         assert vimeo_player_url("") is None
+
+
+class TestStripAnsi:
+    """顏色碼跟著訊息一起印出去，會把畫面吃掉一整段。"""
+
+    def test_removes_colour_codes(self):
+        assert strip_ansi("\x1b[0;31mERROR:\x1b[0m boom") == "ERROR: boom"
+
+    def test_removes_bare_control_characters(self):
+        assert strip_ansi("a\rb\x00c") == "abc"
+
+    def test_keeps_newlines_and_tabs(self):
+        assert strip_ansi("a\nb\tc") == "a\nb\tc"
+
+    def test_keeps_plain_text_untouched(self):
+        assert strip_ansi("Unsupported URL: https://x/y") == "Unsupported URL: https://x/y"
+
+    def test_handles_empty(self):
+        assert strip_ansi("") == "" and strip_ansi(None) == ""

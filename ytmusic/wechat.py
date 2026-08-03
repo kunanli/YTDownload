@@ -166,6 +166,139 @@ def has_probable_video(candidates: list[MediaCandidate]) -> bool:
 # 視頻號頁面用這支 API 取得影片資訊，回應裡就含影片位址。
 FEED_API_MARKERS = ("get_feed_info", "finder/feed", "get_object_detail")
 
+FEED_API_URL = "https://channels.weixin.qq.com/finder-preview/api/feed/get_feed_info"
+SPH_PAGE_URL = "https://channels.weixin.qq.com/finder-preview/pages/sph?id={value}"
+FEED_PAGE_URL = "https://channels.weixin.qq.com/finder-preview/pages/feed?eid={value}"
+
+# 頁面的 JS 從這幾個欄位取影片位址（h265 優先，再 h264，最後才是頂層 videoUrl）。
+_VIDEO_INFO_KEYS = ("h265VideoInfo", "h264VideoInfo")
+
+_SPH_RE = re.compile(r"/sph/([A-Za-z0-9]+)")
+_EID_RE = re.compile(r"[?&]eid=([^&#]+)")
+
+
+def parse_wechat_link(url: str) -> tuple[str, str] | None:
+    """看出網址是哪一種視頻號連結。
+
+    回傳 ``("sph", 短碼)`` 或 ``("eid", 匯出碼)``；認不出來就回 None。
+    兩種要問 API 的方式不同，也決定了網頁端到底放不放行播放。
+    """
+    import urllib.parse
+
+    text = url or ""
+    if match := _EID_RE.search(text):
+        return "eid", urllib.parse.unquote(match.group(1))
+    if match := _SPH_RE.search(text):
+        return "sph", match.group(1)
+    return None
+
+
+def feed_request(kind: str, value: str) -> tuple[str, dict, bytes]:
+    """組出 get_feed_info 的請求（網址、標頭、內容）。
+
+    這支 API 不需要登入也不需要簽章，用一般的 HTTP 就問得到——所以查「這支
+    影片到底拿不拿得到」不必先開瀏覽器等兩分鐘。
+    """
+    import json
+    import urllib.parse
+
+    page = (SPH_PAGE_URL if kind == "sph" else FEED_PAGE_URL).format(
+        value=urllib.parse.quote(value, safe="/")
+    )
+    body = {"baseReq": {"generalToken": ""}}
+    body["shortUri" if kind == "sph" else "exportId"] = value
+    headers = {
+        "content-type": "application/json",
+        "origin": "https://channels.weixin.qq.com",
+        "referer": page,
+        "user-agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0 Safari/537.36"),
+    }
+    query = urllib.parse.urlencode({"_pageUrl": page})
+    return f"{FEED_API_URL}?{query}", headers, json.dumps(body).encode()
+
+
+@dataclass
+class FeedInfo:
+    """get_feed_info 回應裡我們在意的部分。"""
+
+    title: str = ""
+    author: str = ""
+    cover: str = ""
+    video_urls: list[str] = field(default_factory=list)
+    error_type: int = 0
+    error_title: str = ""
+    export_id: str = ""
+
+    @property
+    def playable(self) -> bool:
+        return bool(self.video_urls)
+
+
+def parse_feed_info(payload: dict) -> FeedInfo:
+    """把 API 回應整理成 FeedInfo。
+
+    影片位址可能在 h265VideoInfo／h264VideoInfo 底下，也可能直接放在
+    feedInfo.videoUrl——頁面的播放器三個都會看，我們也一樣。
+    """
+    data = (payload or {}).get("data") or {}
+    feed = data.get("feedInfo") or {}
+    author = data.get("authorInfo") or {}
+    error = data.get("errMsg") or {}
+    scene = data.get("sceneInfo") or {}
+
+    urls: list[str] = []
+    for key in _VIDEO_INFO_KEYS:
+        candidate = (feed.get(key) or {}).get("videoUrl")
+        if candidate:
+            urls.append(candidate)
+    if feed.get("videoUrl"):
+        urls.append(feed["videoUrl"])
+
+    return FeedInfo(
+        title=(feed.get("description") or "").strip().split("\n")[0],
+        author=(author.get("nickname") or "").strip(),
+        cover=feed.get("coverUrl") or "",
+        video_urls=list(dict.fromkeys(urls)),
+        error_type=int(error.get("type") or 0),
+        error_title=(error.get("title") or "").strip(),
+        export_id=scene.get("dynamicExportId") or "",
+    )
+
+
+def fetch_feed_info(url: str, *, timeout: int = 20) -> FeedInfo | None:
+    """直接問 API 這支影片的資訊。認不出網址或問不到就回 None。"""
+    import json
+    import urllib.request
+
+    link = parse_wechat_link(url)
+    if link is None:
+        return None
+    api, headers, body = feed_request(*link)
+    request = urllib.request.Request(api, data=body, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+    return parse_feed_info(payload)
+
+
+# 為什麼 /sph/ 短連結怎麼試都抓不到——實測與前端程式碼都指向同一個結論。
+WEB_BLOCKED_HINT = """微信沒有把影片位址送到網頁端，所以瀏覽器攔不到——它從來沒被送出來。
+
+實測 get_feed_info 這支 API：/sph/ 分享短連結只會回標題、作者與封面，
+沒有 videoUrl；而頁面的播放器在 sph 模式下是關閉的，點下去只會跳出
+「可掃碼前往微信觀看此內容」的 QR code。再等多久、開幾次瀏覽器都一樣。
+
+要拿到這支影片，目前只有這條路：
+  wechatvideodownload / wx_video_download——攔截電腦版微信「客戶端」的流量
+  並解密，需要在微信裡手動播放一次。詳見 README 的「微信視頻號」章節。
+
+（若你手上的網址帶 ?eid=，本工具會自動改走那條路：網頁端在那個模式下是
+  允許播放的。但用你這支影片的 eid 實測，微信回的是「此內容暫時無法播放」，
+  所以不保證每支都行。）"""
+
 
 def is_feed_api(url: str) -> bool:
     lowered = (url or "").lower()

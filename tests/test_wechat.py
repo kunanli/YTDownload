@@ -4,6 +4,8 @@ from ytmusic.wechat import (
     CaptureResult, MediaCandidate, extract_video_urls, has_probable_video,
     is_feed_api, is_missing_browser_error, is_wechat_url, looks_like_media,
     looks_like_playable_video, pick_best_media, suggest_filename,
+    FEED_API_URL, WEB_BLOCKED_HINT, feed_request, parse_feed_info,
+    parse_wechat_link,
 )
 
 
@@ -306,3 +308,106 @@ class TestExtractVideoUrls:
         assert extract_video_urls({}) == []
         assert extract_video_urls(None) == []
         assert extract_video_urls(123) == []
+
+
+class TestParseWechatLink:
+    """兩種連結要問 API 的欄位不同，先分得出來才問得對。"""
+
+    def test_sph_short_link(self):
+        assert parse_wechat_link("https://weixin.qq.com/sph/AJq0mgzYC0") == (
+            "sph", "AJq0mgzYC0")
+
+    def test_sph_with_query(self):
+        assert parse_wechat_link("https://weixin.qq.com/sph/AbC123?x=1") == (
+            "sph", "AbC123")
+
+    def test_eid_link_wins_over_path(self):
+        # 帶 eid 的才是網頁端允許播放的那種，優先採用
+        url = "https://channels.weixin.qq.com/finder-preview/pages/feed?eid=export%2Fabc"
+        assert parse_wechat_link(url) == ("eid", "export/abc")
+
+    def test_unknown(self):
+        assert parse_wechat_link("https://example.com/video") is None
+        assert parse_wechat_link("") is None
+
+
+class TestFeedRequest:
+    def test_sph_uses_short_uri(self):
+        import json
+
+        url, headers, body = feed_request("sph", "AJq0mgzYC0")
+        assert url.startswith(FEED_API_URL + "?")
+        assert json.loads(body)["shortUri"] == "AJq0mgzYC0"
+        assert "pages/sph" in headers["referer"]
+
+    def test_eid_uses_export_id(self):
+        import json
+
+        url, headers, body = feed_request("eid", "export/abc")
+        assert json.loads(body)["exportId"] == "export/abc"
+        assert "pages/feed" in headers["referer"]
+
+    def test_page_url_is_encoded(self):
+        url, _, _ = feed_request("sph", "AbC")
+        assert "_pageUrl=https%3A%2F%2Fchannels.weixin.qq.com" in url
+
+
+class TestParseFeedInfo:
+    """實測回應的形狀：/sph/ 只給封面，帶 eid 的才可能給 videoUrl。"""
+
+    def test_sph_response_has_no_video(self):
+        payload = {"data": {
+            "feedInfo": {"description": "標題\n第二行", "coverUrl": "https://c/1.jpg"},
+            "authorInfo": {"nickname": "三次方AIRX"},
+            "errMsg": {"type": 0},
+            "sceneInfo": {"dynamicExportId": "export/xyz"},
+        }, "errCode": 0}
+        info = parse_feed_info(payload)
+        assert info.title == "標題"
+        assert info.author == "三次方AIRX"
+        assert info.cover == "https://c/1.jpg"
+        assert info.video_urls == []
+        assert info.playable is False
+        assert info.export_id == "export/xyz"
+
+    def test_reads_h265_and_h264(self):
+        payload = {"data": {"feedInfo": {
+            "h265VideoInfo": {"videoUrl": "https://finder.video.qq.com/a"},
+            "h264VideoInfo": {"videoUrl": "https://finder.video.qq.com/b"},
+        }}}
+        info = parse_feed_info(payload)
+        assert info.video_urls == ["https://finder.video.qq.com/a",
+                                   "https://finder.video.qq.com/b"]
+        assert info.playable is True
+
+    def test_falls_back_to_top_level_video_url(self):
+        payload = {"data": {"feedInfo": {"videoUrl": "https://finder.video.qq.com/c"}}}
+        assert parse_feed_info(payload).video_urls == ["https://finder.video.qq.com/c"]
+
+    def test_deduplicates_identical_urls(self):
+        same = "https://finder.video.qq.com/same"
+        payload = {"data": {"feedInfo": {
+            "h264VideoInfo": {"videoUrl": same}, "videoUrl": same}}}
+        assert parse_feed_info(payload).video_urls == [same]
+
+    def test_carries_error_message(self):
+        payload = {"data": {"errMsg": {"type": 2, "title": "此内容暂时无法播放"}}}
+        info = parse_feed_info(payload)
+        assert info.error_type == 2
+        assert info.error_title == "此内容暂时无法播放"
+        assert info.playable is False
+
+    def test_survives_empty_payload(self):
+        info = parse_feed_info({})
+        assert info.title == "" and info.video_urls == [] and info.error_type == 0
+        assert parse_feed_info(None).playable is False
+
+
+class TestWebBlockedHint:
+    def test_names_the_working_alternative(self):
+        # 說「不行」而不給下一步，等於沒說
+        assert "wechatvideodownload" in WEB_BLOCKED_HINT
+
+    def test_does_not_blame_the_user(self):
+        # 舊訊息說「可能是還沒登入、影片沒開始播放」——實測證明都不是原因
+        assert "還沒登入" not in WEB_BLOCKED_HINT

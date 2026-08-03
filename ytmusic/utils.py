@@ -26,6 +26,21 @@ _SPLIT_RE = re.compile(r"\s+[-–—]\s+|\s*[｜|]\s*")
 # YouTube Music 會把官方頻道標成 "<Artist> - Topic"。
 _TOPIC_RE = re.compile(r"\s*-\s*Topic\s*$", re.IGNORECASE)
 
+# 終端機控制碼：ESC 序列（顏色）加上其他控制字元。
+_ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b[@-Z\\-_]")
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
+
+
+def strip_ansi(text: str) -> str:
+    """去掉顏色碼與其他控制字元。
+
+    yt-dlp 在支援顏色的終端機（Windows Terminal 就是）會把錯誤寫成
+    ``\\x1b[0;31mERROR:\\x1b[0m …``。這些碼若跟著訊息一起被切割或印出，
+    畫面會被吃掉一整段——使用者看到的就只剩空白。
+    """
+    return _CONTROL_RE.sub("", _ANSI_RE.sub("", text or ""))
+
+
 _ILLEGAL_FS_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 _WINDOWS_RESERVED = {
     "CON", "PRN", "AUX", "NUL",

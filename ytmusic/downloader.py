@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -17,7 +18,7 @@ from .tagger import (
 )
 from .utils import (
     FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filename,
-    vimeo_player_url,
+    strip_ansi, vimeo_player_url,
 )
 
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
@@ -657,8 +658,15 @@ def _fetch(opts: dict, url: str):
 
 
 def _clean_error_text(raw: str) -> str:
-    """去掉 yt-dlp 錯誤訊息的前綴與冗長的補充說明。"""
-    message = raw.strip().replace("ERROR: ", "").strip()
+    """去掉 yt-dlp 錯誤訊息的前綴與冗長的補充說明。
+
+    第一步一定要先清掉顏色碼：yt-dlp 的錯誤在支援顏色的終端機上長得像
+    ``\\x1b[0;31mERROR:\\x1b[0m …``，而下面的切割條件裡就有 ``;``——不先清掉的話
+    整句會被切成 ``\\x1b[0``，印出去被終端機當成未完成的控制序列吃掉，
+    使用者看到的就是「無法讀取 <網址>：」後面一片空白。
+    """
+    message = strip_ansi(raw).strip()
+    message = re.sub(r"^\s*(ERROR|WARNING)\s*:\s*", "", message).strip()
     for marker in (";", " Please report", "\n"):
         if marker in message:
             head = message.split(marker)[0].strip()

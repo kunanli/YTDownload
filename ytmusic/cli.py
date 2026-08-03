@@ -199,6 +199,8 @@ def _add_wechat_parser(sub) -> None:
                    help="最多等多久（預設 120 秒）")
     p.add_argument("--headless", action="store_true",
                    help="不顯示瀏覽器視窗（已登入過才能用，第一次登入需要看得到畫面）")
+    p.add_argument("--browser", action="store_true",
+                   help="即使微信已表明網頁端拿不到影片，仍然開瀏覽器試一次")
     p.add_argument("--keep-broken", action="store_true",
                    help="即使抓到的檔案看起來不能播也保留下來")
     p.add_argument("-y", "--yes", action="store_true",
@@ -209,7 +211,8 @@ def _add_wechat_parser(sub) -> None:
 def cmd_wechat(args: argparse.Namespace) -> int:
     from .browser import BrowserUnavailable, capture_media, profile_dir
     from .wechat import (
-        ENCRYPTED_HINT, download_media, is_wechat_url, looks_like_playable_video,
+        ENCRYPTED_HINT, WEB_BLOCKED_HINT, MediaCandidate, CaptureResult,
+        download_media, fetch_feed_info, is_wechat_url, looks_like_playable_video,
         suggest_filename,
     )
 
@@ -238,9 +241,33 @@ def cmd_wechat(args: argparse.Namespace) -> int:
     output_dir = Path(args.output).expanduser() if args.output else config.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # 先直接問微信的 API：不必開瀏覽器，一秒就知道這支影片拿不拿得到。
+    # 抓得到就省下整段瀏覽器流程；拿不到也能立刻說明原因，而不是等兩分鐘才失敗。
+    print("正在向微信查這支影片…", file=sys.stderr)
+    feed = fetch_feed_info(args.url)
+    result = None
+    if feed is not None:
+        if feed.title or feed.author:
+            print(f"  {feed.author or '（未知作者）'}｜{feed.title or '（無標題）'}",
+                  file=sys.stderr)
+        if feed.playable:
+            result = CaptureResult(
+                url=args.url, title=feed.title, author=feed.author,
+                candidates=[MediaCandidate(url=u, content_type="video/mp4",
+                                           from_media_host=True)
+                            for u in feed.video_urls],
+            )
+            print("  微信有給影片位址，不用開瀏覽器。", file=sys.stderr)
+        elif not args.browser:
+            reason = feed.error_title or "網頁端沒有影片位址"
+            print(f"\n✖ 拿不到：{reason}\n\n{WEB_BLOCKED_HINT}", file=sys.stderr)
+            print("\n（還是想讓瀏覽器試一次的話，加 --browser）", file=sys.stderr)
+            return EXIT_PRECONDITION
+
     try:
-        result = capture_media(args.url, timeout=args.timeout,
-                               headless=args.headless, assume_yes=args.yes)
+        if result is None:
+            result = capture_media(args.url, timeout=args.timeout,
+                                   headless=args.headless, assume_yes=args.yes)
     except BrowserUnavailable as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_PRECONDITION
@@ -250,8 +277,7 @@ def cmd_wechat(args: argparse.Namespace) -> int:
 
     best = result.best
     if best is None:
-        print("沒有攔截到影片。可能是還沒登入、影片沒開始播放，或微信改了做法。",
-              file=sys.stderr)
+        print(f"沒有攔截到影片。\n\n{WEB_BLOCKED_HINT}", file=sys.stderr)
         _dump_observed(result)
         print(f"登入狀態存在：{profile_dir()}", file=sys.stderr)
         return EXIT_PRECONDITION

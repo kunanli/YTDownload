@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ytmusic"
-version = "1.9.2"
+version = "1.10.0"
 description = "影音下載器：支援 YouTube、Bilibili、Vimeo、微信視頻號等 1700 多個網站，可下載音訊或影片、寫入標籤與封面、抓歌詞字幕，並記錄下載歷史"
 readme = "README.md"
 requires-python = ">=3.9"

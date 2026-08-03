@@ -2,8 +2,9 @@ from pathlib import Path
 
 from ytmusic.config import Config
 from ytmusic.downloader import (
-    Downloader, Track, _CollectingLogger, _fallback_url, _final_path, _parse_rate,
-    _rename_from_meta, _short_error, _unique_path, _walk,
+    Downloader, Track, _CollectingLogger, _clean_error_text, _fallback_url,
+    _final_path, _parse_rate, _rename_from_meta, _short_error, _unique_path,
+    _walk,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -350,3 +351,33 @@ class TestFallbackUrl:
     def test_player_url_has_no_further_fallback(self):
         exc = Exception("[vimeo] 123: OAuth 401")
         assert _fallback_url("https://player.vimeo.com/video/123", exc) is None
+
+
+class TestColouredErrorMessages:
+    """yt-dlp 在支援顏色的終端機上會把錯誤上色，訊息不能因此消失。
+
+    實際災情：使用者只看到「無法讀取 <網址>：」後面一片空白，之後變成
+    「…：DownloadError]」——因為 `\x1b[0;31m` 裡的 `;` 被當成句子分隔符切開，
+    留下半截控制序列把後面的字吃掉。
+    """
+
+    RAW = "\x1b[0;31mERROR:\x1b[0m Unsupported URL: https://lnkd.in/p/gsKEgKZu"
+
+    def test_clean_keeps_the_real_message(self):
+        assert _clean_error_text(self.RAW) == "Unsupported URL: https://lnkd.in/p/gsKEgKZu"
+
+    def test_short_error_has_no_escape_left(self):
+        message = _short_error(Exception(self.RAW))
+        assert "\x1b" not in message
+        assert "lnkd.in" in message
+
+    def test_short_coloured_message_still_readable(self):
+        message = _short_error(Exception("\x1b[0;31mERROR:\x1b[0m HTTP Error 403"))
+        assert message == "HTTP Error 403"
+
+    def test_semicolon_still_trims_verbose_tails(self):
+        text = "Unsupported URL; please report this issue"
+        assert _clean_error_text(text) == "Unsupported URL"
+
+    def test_empty_exception_still_says_something(self):
+        assert "沒有訊息" in _short_error(Exception(""))
