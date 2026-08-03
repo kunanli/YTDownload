@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.15.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.16.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -66,6 +66,7 @@
 | 音質 | `python -m ytmusic config set quality 320` |
 | 歌詞語言 | `python -m ytmusic config set subtitle_langs "繁中,英"` |
 | 同時下載幾首 | `python -m ytmusic config set concurrency 5` |
+| 短網址自動展開（不再詢問） | `python -m ytmusic config set expand_short_urls true` |
 | 看目前設定 | `python -m ytmusic config show` |
 
 ### 出問題了？照畫面上的字找
@@ -96,6 +97,37 @@
 ---
 
 ## 最簡單的用法：雙擊啟動選單
+
+### 第一次雙擊會自動把東西裝好
+
+`下載.bat` 不只是開選單，它會**先確認你有沒有能跑的環境**：
+
+| 順序 | 它做什麼 | 缺了會怎樣 |
+| --- | --- | --- |
+| 1 | 找 Python | 找不到就告訴你 `winget install Python.Python.3.12`，不會直接關掉 |
+| 2 | 檢查 `ytmusic` 套件本身 | 沒裝就**自動** `pip install -e .`（第一次雙擊會看到這步） |
+| 3 | 開選單，選單再檢查 yt-dlp / mutagen / ffmpeg / curl_cffi | 缺了會列出來，並問要不要幫你裝 |
+
+第 3 步長這樣 —— **只有缺東西時才會出現**，都齊全的話直接進選單：
+
+```
+  ── 缺少一些東西 ──
+
+  [必要] ffmpeg：轉不了 MP3，也合併不了影片的畫面與聲音
+  [選用] curl_cffi：部分站台（如 LinkedIn）會擋非瀏覽器的連線，裝了才連得上
+
+  要現在幫你裝嗎？ [Y/n]
+```
+
+- **[必要]** 的才會主動問你要不要裝；**[選用]** 的只列出來，不會追著你問
+- ffmpeg 會用 `winget`（Windows）或 `brew`（macOS）裝；Linux 只給指令請你自己跑
+  （那需要 sudo，不該替你提權）
+- 答 `n` 就會印出手動步驟，不會硬裝
+- 裝完如果還說找不到，**把視窗關掉重開** —— 新裝的程式要重開才進得了 PATH
+
+Mac 的 `下載.command` 流程完全一樣。
+
+### 選單長什麼樣
 
 裝好之後，**不想打指令的話，直接在資料夾裡雙擊
 [`下載.bat`](%E4%B8%8B%E8%BC%89.bat)**（Mac 是
@@ -200,6 +232,8 @@ python -m ytmusic menu
   - [找不到 ffmpeg](#找不到-ffmpeg)
   - [Video unavailable](#video-unavailable影片無法使用)
   - [HTTP Error 403 / 需要登入](#http-error-403或需要登入)
+  - **[先跑 doctor，讓它告訴你問題在哪](#先跑-doctor-讓它告訴你問題在哪)** — 不確定時先跑這個
+  - [短網址被擋住](#短網址被擋住)　·　[SSL 連線被切斷](#ssl-連線被切斷)
   - [下載很慢或一直失敗](#下載很慢或一直失敗)
   - [想看詳細錯誤](#我想看到底出了什麼事)
   - [想重新下載已下載過的](#下載過的我還想再下載一次)
@@ -896,6 +930,132 @@ python -m ytmusic dl "網址" --cookies-from-browser chrome
 
 Chrome 讀不到的話改用 Firefox（Windows 上 Chrome 常常讀不到，這是 Google 的保護機制）。
 
+## 先跑 doctor 讓它告訴你問題在哪
+
+與其照著清單一項項猜，不如讓工具自己測：
+
+```powershell
+python -m ytmusic doctor "貼上連不上的那個網址"
+```
+
+（不想打指令：雙擊 `下載.bat`，選 `[9]`。）
+
+它會先列出環境，再用**幾種連線方式各試一次同一個網址**，最後給一句結論：
+
+```
+環境檢查
+  ✔ Python      3.12.1
+  ✔ yt-dlp      2026.07.04
+  ✔ ffmpeg      C:\ffmpeg\bin\ffmpeg.exe
+  ✔ mutagen     1.48.1
+  ! curl_cffi   沒有安裝　→　python -m pip install "curl_cffi>=0.10,<0.16"
+  ! playwright  沒有安裝（只有微信瀏覽器模式需要）
+
+連線測試：https://lnkd.in/p/XXXXXXXX
+  ✖ 一般連線    [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation…
+  ✖ 強制 IPv4   [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation…
+  ✔ 完整網址    讀得到：Hello, digital twins + Blender lover! | Hans Yang
+
+結論：只有完整網址通得了——被擋的是短網址那個網域本身，不是這個站台。
+```
+
+**`curl_cffi` 那行特別重要** —— 它會分清楚是「沒裝」還是「裝了但版本不對」，
+這兩種情況 yt-dlp 都只會說「target 不可用」，看不出差別。
+
+## 短網址被擋住
+
+**如果失敗的都是 `lnkd.in`、`bit.ly` 這類短網址，先懷疑短網址本身。**
+
+`lnkd.in` 是 LinkedIn 的轉址網域，因此出現在**大量追蹤器封鎖清單**裡 ——
+廣告阻擋、DNS 過濾、防毒的網頁防護都會擋它。這種封鎖多半是看連線裡的網域名稱
+直接把它切斷，症狀正是 `UNEXPECTED_EOF`；而同一台電腦連 `linkedin.com`
+可能完全正常。
+
+工具會自己處理。連線被切斷時你會看到：
+
+```
+  連線被中斷，改用 IPv4，再試一次…
+  連線被中斷，把短網址換成完整網址，再試一次…
+
+短網址展開會把這個網址送給第三方服務：
+  https://unshorten.me/json/{url}
+
+送出去的只有網址本身，不會送出你的 cookies 或登入資訊。
+  要展開短網址再試一次嗎？ [Y/n] Y
+    → https://www.linkedin.com/posts/…-ugcPost-7480643058343079937-CDDJ/
+  以後遇到短網址都自動展開嗎？ [Y/n] Y
+  好，記住了：C:\Users\你的名字\.config\ytmusic\config.json
+```
+
+**第二個問題答 `Y` 之後就不會再問了。** 等同於：
+
+```powershell
+python -m ytmusic config set expand_short_urls true    # 想取消就設成 false
+```
+
+想一開始就不問，或永遠不要用：
+
+```powershell
+python -m ytmusic dl "網址" --expand        # 直接展開，不詢問
+python -m ytmusic dl "網址" --no-expand     # 永遠不展開，也不詢問
+```
+
+`--expander-url` 可以換成自架的展開服務。
+
+自己動手也行：在瀏覽器開那個短網址，複製網址列那串長的 `linkedin.com/posts/...`
+直接貼進去，完全不經過第三方。
+
+> ### ⚠️ `curl: (35) TLS connect error … invalid library`
+>
+> 裝了 `curl_cffi` 之後看到這個錯，那是 **curl_cffi 在 Windows 上的已知問題**，
+> 不是你設定錯：
+> [yt-dlp#15385](https://github.com/yt-dlp/yt-dlp/issues/15385)、
+> [curl_cffi#601](https://github.com/lexiforest/curl_cffi/issues/601) ——
+> 兩個 issue 目前都還開著，沒有修法。
+>
+> 這種情況就別在假扮瀏覽器那條路上耗了，直接用上面的短網址展開。
+
+## SSL 連線被切斷
+
+畫面出現這種訊息：
+
+```
+✖ 無法讀取 https://lnkd.in/p/XXXXXXXX：Unable to download webpage:
+  [SSL: UNEXPECTED_EOF_WHILE_READING] EOF occurred in violation of protocol
+```
+
+**這不是那支影片的問題，是連線在半路被切斷。** 工具會自動依序改用 IPv4、
+假扮瀏覽器（若已安裝 curl_cffi）、以及展開短網址。全都不行時再依序試：
+
+| 順序 | 做法 | 為什麼 |
+| --- | --- | --- |
+| 1 | **直接再跑一次** | 這種斷線常常是暫時的 |
+| 2 | **短網址換成完整網址** | 見上一節，這是最常見的成因 |
+| 3 | **暫時關掉防毒的「HTTPS／SSL 掃描」** | Avast、Kaspersky、ESET 會拆開 TLS 連線做檢查 |
+| 4 | **關掉 VPN／Proxy**，或反過來 `--proxy` 指定一個 | 中間設備是常見兇手 |
+| 5 | **換個網路**（手機熱點） | 用來確認是不是這條網路的問題 |
+
+### 只有 LinkedIn 這樣？那多半是 TLS 指紋
+
+如果 YouTube、Bilibili 都正常，只有某個站台連不上，那通常不是你的網路壞了 ——
+是**對方在看 TLS 握手的特徵判斷你是不是瀏覽器**，不像就直接把連線切斷。
+
+解法是讓 yt-dlp 假扮成瀏覽器的 TLS 指紋：
+
+```powershell
+python -m pip install "curl_cffi>=0.10,<0.16"
+```
+
+裝好之後**什麼都不用改** —— 下次遇到連線被切斷時會自動用上。也可以固定啟用：
+
+```powershell
+python -m ytmusic config set impersonate chrome
+```
+
+> ⚠️ **版本範圍不能省。** yt-dlp 只接受 `0.10 ≤ curl_cffi < 0.16`，
+> 直接 `pip install curl_cffi` 會裝到 0.16，然後 yt-dlp 只會說
+> 「Impersonate target "chrome" is not available」，完全不提是版本問題。
+
 ## 下載很慢或一直失敗
 
 YouTube 常常改東西，工具要跟著更新：
@@ -979,6 +1139,10 @@ pip install -e .
 | `--cookies-from-browser` | 從瀏覽器讀登入資訊 |
 | `--cookies FILE` | 指定 cookies.txt |
 | `--proxy URL` | 代理伺服器 |
+| `--impersonate [瀏覽器]` | 假扮成瀏覽器的 TLS 指紋（需 curl_cffi） |
+| `--expand` | 短網址連不上時直接展開成完整網址，不再詢問 |
+| `--no-expand` | 永遠不展開短網址，也不詢問 |
+| `--expander-url URL` | 自訂短網址展開服務（可自架） |
 | `--rate-limit RATE` | 限速，例如 `500K` |
 | `--template TMPL` | 自訂 yt-dlp 檔名樣板（需含 `%(ext)s`） |
 | `--no-progress` | 關掉進度列，只輸出純文字 |
@@ -1022,6 +1186,8 @@ python -m ytmusic config show                        # 看目前設定
 python -m ytmusic config set output_dir "D:\Music"   # 改輸出位置
 python -m ytmusic config set quality 320             # 改音質
 python -m ytmusic config set playlist_folder true    # 清單一律建資料夾
+python -m ytmusic config set expand_short_urls true  # 短網址一律自動展開
+python -m ytmusic config set impersonate chrome      # 一律假扮瀏覽器連線
 python -m ytmusic config reset                       # 還原預設
 ```
 

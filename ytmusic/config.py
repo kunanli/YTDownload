@@ -43,6 +43,9 @@ class Config:
     use_history: bool = True
     playlist_folder: bool = False
     rename_from_tags: bool = True
+    # 短網址連不上時自動展開成完整網址。會把網址送給第三方服務，
+    # 所以預設關閉——要嘛使用者當場同意，要嘛自己打開。
+    expand_short_urls: bool = False
     subtitle_langs: str = "zh-TW,zh-Hans,en,ja,ko,es"
     filename_template: str = DEFAULT_TEMPLATE
     cookies_file: str | None = None
@@ -160,6 +163,7 @@ def coerce_value(field_name: str, raw: str):
     bool_fields = {
         "convert", "write_tags", "embed_cover", "square_cover",
         "use_history", "playlist_folder", "rename_from_tags",
+        "expand_short_urls",
     }
     if field_name in bool_fields:
         if lowered in {"1", "true", "yes", "on", "y"}:

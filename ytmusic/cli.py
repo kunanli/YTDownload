@@ -529,11 +529,13 @@ def _build_config(args: argparse.Namespace) -> Config:
     )
 
 
-def _short_url_expander(urls: list[str], args: argparse.Namespace):
-    """準備好「連不上時把短網址換成完整網址」這一招，但先取得同意。
+def _short_url_expander(urls: list[str], args: argparse.Namespace, config: Config):
+    """準備好「連不上時把短網址換成完整網址」這一招。
 
     擋住連線的常常就是短網址那個網域本身（`lnkd.in` 在很多追蹤器封鎖清單上），
     所以繞過它往往就通了——代價是得請第三方幫忙問出它指向哪裡。
+
+    同意過一次就記得住：設定檔打開之後不再詢問，直接展開。
     """
     from .shorturl import DEFAULT_EXPANDER, is_short_url
 
@@ -541,7 +543,8 @@ def _short_url_expander(urls: list[str], args: argparse.Namespace):
         return None
 
     service = getattr(args, "expander_url", None) or DEFAULT_EXPANDER
-    agreed = {"asked": False, "ok": bool(getattr(args, "expand", False))}
+    automatic = bool(getattr(args, "expand", False)) or config.expand_short_urls
+    agreed = {"asked": False, "ok": automatic}
 
     def expander(url: str) -> str:
         from .shorturl import EXPANDER_NOTICE, expand
@@ -559,9 +562,35 @@ def _short_url_expander(urls: list[str], args: argparse.Namespace):
             agreed["ok"] = answer in {"", "y", "yes", "要"}
             if not agreed["ok"]:
                 return ""
+            _remember_expand()
         return expand(url, service=service)
 
     return expander
+
+
+def _remember_expand() -> None:
+    """問一次要不要以後都自動展開，答應就寫進設定檔。
+
+    這比叫使用者去背一個 `config set` 指令實在——他剛剛才同意過一次，
+    正是問「要不要每次都這樣」的時候。
+    """
+    if not sys.stdin.isatty():
+        return
+    try:
+        answer = input("  以後遇到短網址都自動展開嗎？ [Y/n] ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        print(file=sys.stderr)
+        return
+    if answer not in {"", "y", "yes", "要"}:
+        return
+    try:
+        path = Config.load().merged(expand_short_urls=True).save()
+    except OSError as exc:
+        print(f"  記不起來（{exc}）——下次還是會問。", file=sys.stderr)
+        return
+    print(f"  好，記住了：{path}\n"
+          f"  想取消：python -m ytmusic config set expand_short_urls false",
+          file=sys.stderr)
 
 
 def _langs(flag: str | None, config: Config) -> str | None:
@@ -595,7 +624,7 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
                             verbose=args.verbose, video=args.video,
                             subs=_langs(args.subs, config),
                             lyrics=_langs(args.lyrics, config))
-    downloader.expander = _short_url_expander(urls, args)
+    downloader.expander = _short_url_expander(urls, args, config)
 
     try:
         downloader.preflight()

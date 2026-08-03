@@ -97,3 +97,25 @@ class TestCoerceValue:
 
     def test_passes_strings_through(self):
         assert coerce_value("audio_format", "flac") == "flac"
+
+
+class TestExpandShortUrls:
+    """同意過一次就該記得住，不然每次下載都被問一遍。"""
+
+    def test_defaults_to_off(self):
+        # 會把網址送給第三方，所以預設關閉
+        assert Config().expand_short_urls is False
+
+    def test_accepts_boolean_strings(self):
+        assert coerce_value("expand_short_urls", "true") is True
+        assert coerce_value("expand_short_urls", "false") is False
+        assert coerce_value("expand_short_urls", "y") is True
+
+    def test_rejects_nonsense(self):
+        with pytest.raises(ValueError):
+            coerce_value("expand_short_urls", "maybe")
+
+    def test_survives_a_save_load_round_trip(self, tmp_path):
+        path = tmp_path / "config.json"
+        Config().merged(expand_short_urls=True).save(path)
+        assert Config.load(path).expand_short_urls is True
