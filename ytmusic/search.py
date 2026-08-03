@@ -73,10 +73,13 @@ def _is_video(entry: dict) -> bool:
     ie_key = str(entry.get("ie_key") or entry.get("_type") or "").lower()
     if any(token in ie_key for token in _NON_VIDEO_IE_KEYS):
         return False
-    # 頻道 ID 是 UC 開頭的 24 碼；影片 ID 是 11 碼。沒有長度又是頻道 ID 的一律排除。
+    # YouTube 的頻道 ID 是 UC 開頭的 24 碼、影片 ID 是 11 碼，可用長度分辨。
+    # 這個規則只對 YouTube 成立——Bilibili 的 BV 號就有 12 碼，套上去會被誤刪。
     video_id = str(entry.get("id") or "")
-    if entry.get("duration") is None and (video_id.startswith("UC") or len(video_id) > 11):
-        return False
+    is_youtube = "youtube" in ie_key or not ie_key
+    if is_youtube and entry.get("duration") is None:
+        if video_id.startswith("UC") or len(video_id) > 11:
+            return False
     return True
 
 

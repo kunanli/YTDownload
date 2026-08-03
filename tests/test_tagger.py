@@ -1,4 +1,4 @@
-from ytmusic.tagger import build_metadata, pick_thumbnail_url
+from ytmusic.tagger import _looks_like_cover, build_metadata, pick_thumbnail_url
 
 
 class TestBuildMetadata:
@@ -83,10 +83,53 @@ class TestPickThumbnailUrl:
         ]}
         assert pick_thumbnail_url(info).startswith("https://i.ytimg.com")
 
-    def test_falls_back_to_constructed_url(self):
-        assert pick_thumbnail_url({"id": "abc123"}) == (
+    def test_youtube_falls_back_to_constructed_url(self):
+        info = {"id": "abc123", "extractor_key": "Youtube"}
+        assert pick_thumbnail_url(info) == (
             "https://i.ytimg.com/vi/abc123/maxresdefault.jpg"
         )
 
+    def test_other_sites_do_not_get_a_youtube_url(self):
+        # Bilibili 的 ID 套進 ytimg 網址只會得到死連結
+        info = {"id": "BV1GJ411x7h7", "extractor_key": "BiliBili"}
+        assert pick_thumbnail_url(info) is None
+
+    def test_non_jpeg_thumbnail_is_still_used(self):
+        # 別的站台縮圖常是 webp 或沒有副檔名，照收即可
+        info = {"id": "BV1x", "extractor_key": "BiliBili",
+                "thumbnail": "https://i0.hdslb.com/bfs/archive/abc.jpg@672w_378h"}
+        assert pick_thumbnail_url(info).startswith("https://i0.hdslb.com")
+
     def test_returns_none_without_id_or_thumbnails(self):
         assert pick_thumbnail_url({}) is None
+
+
+class TestCoverValidation:
+    def _png(self, width, height):
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        Image.new("RGB", (width, height), "red").save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def test_rejects_one_pixel_placeholder(self):
+        # Bilibili 沒有縮圖時會回 transparent.png，是 1x1 的透明圖
+        assert _looks_like_cover(self._png(1, 1)) is False
+
+    def test_rejects_tiny_files(self):
+        assert _looks_like_cover(b"\x89PNG\r\n\x1a\n" + b"x" * 50) is False
+
+    def test_rejects_broken_image_data(self):
+        assert _looks_like_cover(b"x" * 5000) is False
+
+    def test_accepts_real_cover(self):
+        assert _looks_like_cover(self._png(640, 640)) is True
+
+    def test_rejects_small_dimensions_even_if_file_is_large(self):
+        import io
+        from PIL import Image
+        buffer = io.BytesIO()
+        # 雜訊填滿讓檔案夠大，但尺寸仍然過小
+        Image.effect_noise((20, 20), 100).convert("RGB").save(buffer, format="PNG")
+        data = buffer.getvalue() + b"\x00" * 4000
+        assert _looks_like_cover(data) is False

@@ -135,6 +135,8 @@ def _add_search_parser(sub) -> None:
                    help="顯示幾筆結果（預設 8，上限 50）")
     p.add_argument("--first", action="store_true",
                    help="不詢問，直接下載第一筆（適合寫在腳本裡）")
+    p.add_argument("--site", choices=("youtube", "bilibili"), default="youtube",
+                   help="要搜尋哪個站台（預設 youtube）")
     p.add_argument("-a", "--artist", action="store_true",
                    help="把關鍵字當成歌手名：只列出該歌手頻道的單曲，排除翻唱與合輯")
     _add_download_options(p)
@@ -431,11 +433,13 @@ def cmd_search(args: argparse.Namespace) -> int:
     config = _build_config(args)
     downloader = Downloader(config, verbose=args.verbose)  # 搜尋不需要下載設定
     mode = "歌手" if args.artist else "搜尋"
-    print(f"{mode}「{query}」…", file=sys.stderr)
+    where = "" if args.site == "youtube" else f"（{args.site}）"
+    print(f"{mode}「{query}」{where}…", file=sys.stderr)
     try:
         # 歌手模式要多撈一些，因為接下來會濾掉非本人頻道的結果。
         results = downloader.search(
-            query, limit=args.limit * 3 if args.artist else args.limit)
+            query, limit=args.limit * 3 if args.artist else args.limit,
+            site=args.site)
     except DownloadAborted as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_PRECONDITION

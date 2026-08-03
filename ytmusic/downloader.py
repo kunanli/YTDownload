@@ -20,6 +20,9 @@ from .utils import FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filena
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
 _BEST_VBR = "0"
 
+# 各站台的搜尋前綴（yt-dlp 內建）。
+SEARCH_PREFIXES = {"youtube": "ytsearch", "bilibili": "bilisearch"}
+
 
 @dataclass
 class Track:
@@ -145,8 +148,12 @@ class Downloader:
                     tracks.append(track)
         return tracks
 
-    def search(self, query: str, limit: int = 8) -> list[SearchResult]:
-        """用關鍵字搜尋 YouTube，回傳候選曲目（不下載）。"""
+    def search(self, query: str, limit: int = 8,
+               site: str = "youtube") -> list[SearchResult]:
+        """用關鍵字搜尋，回傳候選曲目（不下載）。
+
+        ``site`` 決定用哪個站台的搜尋前綴；yt-dlp 對每個站台的搜尋各有一組。
+        """
         from yt_dlp import YoutubeDL
 
         limit = max(1, min(limit, 50))
@@ -158,7 +165,8 @@ class Downloader:
 
         with YoutubeDL(opts) as ydl:
             try:
-                info = ydl.extract_info(f"ytsearch{limit}:{query}", download=False)
+                prefix = SEARCH_PREFIXES.get(site, SEARCH_PREFIXES["youtube"])
+                info = ydl.extract_info(f"{prefix}{limit}:{query}", download=False)
             except Exception as exc:
                 raise DownloadAborted(f"搜尋失敗：{_short_error(exc, logger)}") from exc
         return parse_results(info)

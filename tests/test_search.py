@@ -193,3 +193,21 @@ class TestLongMarker:
     def test_official_audio_beats_long_marker(self):
         both = SearchResult("a", "合輯", "Chan - Topic", 8000.0, "u")
         assert "♪" in format_results([both])[0]
+
+
+class TestNonYouTubeIdsAreKept:
+    def test_bilibili_bv_id_survives(self):
+        # BV 號有 12 碼，YouTube 的長度規則會把它誤判成頻道而刪掉
+        info = {"entries": [{"id": "BV1GJ411x7h7", "title": "測試",
+                             "ie_key": "BiliBili", "duration": None}]}
+        assert [r.video_id for r in parse_results(info)] == ["BV1GJ411x7h7"]
+
+    def test_bilibili_with_duration(self):
+        info = {"entries": [{"id": "BV1GJ411x7h7", "title": "測試",
+                             "ie_key": "BiliBili", "duration": 200}]}
+        assert len(parse_results(info)) == 1
+
+    def test_bilibili_playlist_still_dropped(self):
+        info = {"entries": [{"id": "x", "title": "合集",
+                             "ie_key": "BilibiliPlaylist", "duration": None}]}
+        assert parse_results(info) == []

@@ -1,8 +1,8 @@
 # YTDownload
 
-**v1.0.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.1.0** ｜ [更新紀錄](CHANGELOG.md)
 
-把 YouTube 和 YouTube Music 的東西下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
+把 YouTube、YouTube Music 和 Bilibili 的東西下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
 **完全不懂電腦也沒關係**，照著下面做就行。安裝只要做一次，大概 10 分鐘。
 
@@ -21,6 +21,8 @@
 | 下載影片字幕（內嵌字幕軌） | ✅ |
 | 用歌手名稱找歌 | ✅ |
 | YouTube Music 的網址 | ✅ |
+| Bilibili（含搜尋、合集、收藏夾） | ✅ |
+| 微信視頻號 | ❌ [為什麼](#為什麼不支援微信視頻號) |
 
 ---
 
@@ -34,6 +36,8 @@
 | 下載一首歌 | `python -m ytmusic dl "網址"` | [看這裡](#下載一首歌) |
 | 不知道網址，用歌名找 | `python -m ytmusic search "歌名"` | [看這裡](#用歌名搜尋) |
 | 找某個歌手的歌 | `python -m ytmusic search "歌手" -a` | [看這裡](#用歌手名稱找歌) |
+| 下載 Bilibili 影片 | `python -m ytmusic dl "B站網址"` | [看這裡](#bilibili) |
+| 在 Bilibili 搜尋 | `python -m ytmusic search "關鍵字" --site bilibili` | [看這裡](#bilibili) |
 | 下載整張播放清單 | `python -m ytmusic dl "網址" --playlist` | [看這裡](#下載整張播放清單) |
 | 每首歌收進清單資料夾 | 再加 `--playlist-folder` | [看這裡](#下載整張播放清單) |
 | 下載影片 | `python -m ytmusic dl "網址" --video 1080` | [看這裡](#下載影片) |
@@ -142,6 +146,7 @@ python -m ytmusic menu
   - [Windows](#windows)　·　[macOS](#macos)
 - **[第二部分：開始下載](#第二部分開始下載)**
   - [用歌名搜尋](#用歌名搜尋)
+  - [Bilibili](#bilibili)　·　[微信視頻號？](#為什麼不支援微信視頻號)
   - [用歌手名稱找歌](#用歌手名稱找歌)
   - [下載一首歌](#下載一首歌)
   - [下載整張播放清單](#下載整張播放清單)
@@ -323,6 +328,48 @@ python -m ytmusic search "歌名" --video    # 搜到的直接下載成影片
 ```
 
 > 💡 有 ♪ 記號的是 YouTube Music 的官方音源，通常音質最好、也不會有片頭片尾。
+
+## Bilibili
+
+**網址直接貼就能用**，跟 YouTube 一樣：
+
+```powershell
+python -m ytmusic dl "https://www.bilibili.com/video/BV1xx411c7mD"
+python -m ytmusic dl "https://www.bilibili.com/video/BVxxxxxxx" --video 1080
+```
+
+UP 主會被當成「演出者」寫進標籤，檔名一樣整理成 `UP主 - 標題.mp3`。
+合集、收藏夾、UP 主的投稿列表也都支援，貼上網址就會整批展開。
+
+搜尋要加 `--site bilibili`：
+
+```powershell
+python -m ytmusic search "周杰倫" --site bilibili
+```
+
+> ⚠️ Bilibili 有**地區限制**。部分影片在中國大陸以外會顯示
+> `This video may be deleted or geo-restricted`，這是 Bilibili 擋的，不是工具的問題。
+> 有代理伺服器的話可以加 `--proxy`：
+>
+> ```powershell
+> python -m ytmusic dl "網址" --proxy socks5://127.0.0.1:1080
+> ```
+>
+> 需要登入才能看的影片（大會員、付費內容）加 `--cookies-from-browser chrome`。
+
+## 為什麼不支援微信視頻號
+
+**做不到，不是沒做。**
+
+微信視頻號（`channels.weixin.qq.com`）是封閉平台：
+
+- 網頁只是一層空殼（實測整頁只有 2.5 KB），影片網址完全由前端 JS 動態取得
+- 取得過程需要微信的簽章與 session token，等同要逆向整套微信驗證機制
+- 底層的 yt-dlp 有 1752 個網站的支援模組，**沒有任何一個對應微信視頻號**
+
+這不是加幾行程式就能解決的，而且就算硬做出來，微信一改就壞。目前沒有可靠的做法。
+
+如果你手機上有影片，較實際的方式是用微信自己的「儲存到相簿」功能。
 
 ## 用歌手名稱找歌
 

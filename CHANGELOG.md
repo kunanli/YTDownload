@@ -2,6 +2,27 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.1.0
+
+### 新增
+
+- Bilibili 支援：影片網址直接下載，合集、收藏夾、UP 主投稿列表都會展開
+- `search --site bilibili`：在 Bilibili 搜尋
+
+### 修正
+
+- 非 YouTube 站台的封面會抓到死連結：原本任何影片 ID 都會被拼成
+  `i.ytimg.com` 網址，現在只有 YouTube 才這樣推導
+- Bilibili 的 BV 號有 12 碼，被 YouTube 的「超過 11 碼＝頻道」規則誤刪，
+  該規則現在只套用在 YouTube
+- 影片沒有縮圖時，站台可能回一張 1×1 的透明佔位圖（Bilibili 的
+  `transparent.png`），原本會被當成專輯封面寫進檔案；現在會驗證尺寸後才寫入
+
+### 說明
+
+- 微信視頻號無法支援：網頁是純 JS 外殼，影片網址需要微信的簽章與 session
+  token 才取得到，yt-dlp 的 1752 個網站模組裡沒有對應的實作
+
 ## 1.0.0
 
 第一個正式版。功能齊全、301 個測試、在 Windows 與 Linux 上都實機跑過。

@@ -108,26 +108,59 @@ def pick_thumbnail_url(info: dict) -> str | None:
         return candidates[-1][2]
 
     url = info.get("thumbnail") or ""
-    if url.split("?")[0].lower().endswith((".jpg", ".jpeg")):
+    if url:
+        # 非 YouTube 站台（Bilibili 等）的縮圖常是 webp／無副檔名，照收即可，
+        # 交給 mutagen 依實際位元組判斷 MIME。
         return url
 
+    # 只有 YouTube 能從影片 ID 推出縮圖網址，別的站台硬湊會得到死連結。
     video_id = info.get("id")
-    if video_id:
+    if video_id and _is_youtube(info):
         return f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
     return None
 
 
+def _is_youtube(info: dict) -> bool:
+    extractor = str(info.get("extractor_key") or info.get("extractor") or "").lower()
+    return extractor.startswith("youtube")
+
+
+# 真正的專輯封面不可能這麼小；比這小的多半是佔位圖或追蹤像素。
+MIN_COVER_BYTES = 2048
+MIN_COVER_PIXELS = 100
+
+
 def fetch_cover(url: str, *, square: bool = True) -> bytes | None:
-    """抓取封面圖；``square`` 為真且裝了 Pillow 時會裁成正方形。"""
+    """抓取封面圖；``square`` 為真且裝了 Pillow 時會裁成正方形。
+
+    有些站台在影片沒有縮圖時會回一張 1×1 的透明佔位圖（例如 Bilibili 的
+    transparent.png），這種東西不該被寫成專輯封面，所以會先驗證再回傳。
+    """
     data = _http_get(url)
     if data is None and "maxresdefault" in url:
         # maxresdefault 不是每支影片都有，退回一定存在的 hqdefault。
         data = _http_get(url.replace("maxresdefault", "hqdefault"))
-    if not data:
+    if not data or not _looks_like_cover(data):
         return None
     if square:
         data = _crop_square(data) or data
     return data
+
+
+def _looks_like_cover(data: bytes) -> bool:
+    """擋掉佔位圖與破損檔案。"""
+    if len(data) < MIN_COVER_BYTES:
+        return False
+    try:
+        from PIL import Image  # type: ignore
+    except ImportError:
+        return True  # 沒有 Pillow 就只能靠檔案大小判斷
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            width, height = image.size
+    except Exception:
+        return False
+    return width >= MIN_COVER_PIXELS and height >= MIN_COVER_PIXELS
 
 
 def _http_get(url: str) -> bytes | None:
