@@ -3,8 +3,8 @@ import io
 import pytest
 
 from ytmusic.menu import (
-    LANGUAGE_CHOICES, MENU_ITEMS, Cancelled, ask_languages, build_command,
-    render_menu, run_menu,
+    LANGUAGE_CHOICES, MENU_ITEMS, Cancelled, ask_languages, ask_site,
+    build_command, render_menu, run_menu,
 )
 
 
@@ -42,11 +42,24 @@ class TestBuildCommand:
     def test_blank_url_cancels(self):
         assert build_command("1", Asker("   ")) is None
 
-    def test_search(self):
-        assert build_command("2", Asker("告白氣球")) == ["search", "告白氣球"]
+    def test_search_defaults_to_youtube(self):
+        assert build_command("2", Asker("告白氣球", "")) == ["search", "告白氣球"]
+
+    def test_search_on_bilibili(self):
+        assert build_command("2", Asker("告白氣球", "2")) == [
+            "search", "告白氣球", "--site", "bilibili"
+        ]
+
+    def test_search_explicit_youtube_adds_nothing(self):
+        assert build_command("2", Asker("告白氣球", "1")) == ["search", "告白氣球"]
 
     def test_artist_search(self):
-        assert build_command("3", Asker("周杰倫")) == ["search", "--artist", "周杰倫"]
+        assert build_command("3", Asker("周杰倫", "")) == ["search", "--artist", "周杰倫"]
+
+    def test_artist_search_on_bilibili(self):
+        assert build_command("3", Asker("周杰倫", "2")) == [
+            "search", "--artist", "周杰倫", "--site", "bilibili"
+        ]
 
     def test_artist_blank_cancels(self):
         assert build_command("3", Asker("  ")) is None
@@ -237,3 +250,46 @@ class TestPlaylistPrompts:
         assert build_command("4", Asker(url, "2", "y", "1,3", "y")) == [
             "dl", url, "--video", "1080", "--subs", "繁中,英", "--playlist-folder"
         ]
+
+
+class TestWechatAutoRedirect:
+    """微信網址貼進音樂／影片選項時，應自動改走微信那條路。
+
+    使用者不該需要知道哪個選單編號對應哪個平台。
+    """
+
+    WX = "https://weixin.qq.com/sph/AJq0mgzYC0"
+
+    def test_music_option_redirects(self):
+        assert build_command("1", Asker(self.WX, "")) == ["wechat", self.WX]
+
+    def test_video_option_redirects(self):
+        assert build_command("4", Asker(self.WX, "")) == ["wechat", self.WX]
+
+    def test_redirect_still_offers_headless(self):
+        assert build_command("1", Asker(self.WX, "y")) == [
+            "wechat", self.WX, "--headless"
+        ]
+
+    def test_normal_url_is_not_redirected(self):
+        assert build_command("1", Asker("https://youtu.be/a", ""))[0] == "dl"
+
+    def test_bilibili_url_is_not_redirected(self):
+        url = "https://www.bilibili.com/video/BV1xx411c7mD"
+        assert build_command("1", Asker(url, ""))[:2] == ["dl", url]
+
+
+class TestAskSite:
+    def test_enter_means_youtube(self):
+        assert ask_site(Asker("")) == []
+
+    def test_bilibili(self):
+        assert ask_site(Asker("2")) == ["--site", "bilibili"]
+
+    def test_invalid_falls_back_to_youtube(self):
+        assert ask_site(Asker("99")) == []
+
+    def test_prompt_lists_both_sites(self):
+        asker = Asker("")
+        ask_site(asker)
+        assert "YouTube" in asker.prompts[0] and "Bilibili" in asker.prompts[0]

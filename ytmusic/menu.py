@@ -31,6 +31,23 @@ def ask_yes(ask: Callable[[str], str], question: str) -> bool:
     return ask(f"  {question}[y/Enter=不用] ").strip().lower() in YES
 
 
+SEARCH_SITES = (("1", "youtube", "YouTube"), ("2", "bilibili", "Bilibili"))
+
+
+def ask_site(ask: Callable[[str], str]) -> list[str]:
+    """搜尋要在哪個站台。回傳可直接接在指令後面的參數。
+
+    只有「搜尋」需要問——貼網址的情況 yt-dlp 自己認得出是哪個站台。
+    """
+    options = "　".join(f"[{key}] {label}" for key, _, label in SEARCH_SITES)
+    answer = ask(f"\n   在哪裡搜尋：{options}\n  請選擇（直接按 Enter = YouTube）：").strip()
+    if not answer:
+        return []
+    table = {key: value for key, value, _ in SEARCH_SITES}
+    site = table.get(answer)
+    return ["--site", site] if site and site != "youtube" else []
+
+
 def ask_languages(ask: Callable[[str], str], what: str) -> str:
     """讓使用者挑字幕／歌詞語言，回傳像 "繁中,英" 的字串。
 
@@ -99,6 +116,8 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         url = ask("  貼上網址後按 Enter：").strip()
         if not url:
             return None
+        if redirect := _wechat_redirect(url, ask):
+            return redirect
         command = ["dl", url]
         if ask_yes(ask, "要一起抓歌詞嗎？"):
             command += _lang_flag("--lyrics", ask_languages(ask, "歌詞"))
@@ -106,16 +125,20 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
 
     if choice == "2":
         keyword = ask("  要找什麼歌？ ").strip()
-        return ["search", keyword] if keyword else None
+        return ["search", keyword] + ask_site(ask) if keyword else None
 
     if choice == "3":
         artist = ask("  歌手名稱？ ").strip()
-        return ["search", "--artist", artist] if artist else None
+        if not artist:
+            return None
+        return ["search", "--artist", artist] + ask_site(ask)
 
     if choice == "4":
         url = ask("  貼上網址後按 Enter：").strip()
         if not url:
             return None
+        if redirect := _wechat_redirect(url, ask):
+            return redirect
         answer = ask("\n   畫質：[1] 720p　[2] 1080p　[3] 最高\n  請選擇（直接按 Enter = 720p）：")
         quality = VIDEO_CHOICES.get(answer.strip() or "1", "720")
         command = ["dl", url, "--video", quality]
@@ -125,12 +148,7 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
 
     if choice == "5":
         url = ask("  貼上視頻號網址：").strip()
-        if not url:
-            return None
-        # 第一次要看得到視窗才能掃碼；登入過的人可以省下開視窗。
-        headless = ask("  已經登入過了嗎？免開視窗執行 [y/Enter=顯示視窗] ")
-        command = ["wechat", url]
-        return command + ["--headless"] if headless.strip().lower() in YES else command
+        return _wechat_command(url, ask) if url else None
 
     if choice == "6":
         return ["sync"]
@@ -149,6 +167,26 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
         return command
 
     return None
+
+
+def _wechat_command(url: str, ask: Callable[[str], str]) -> list[str]:
+    """組出微信視頻號的指令；第一次要看得到視窗才能掃碼登入。"""
+    headless = ask("  已經登入過了嗎？免開視窗執行 [y/Enter=顯示視窗] ")
+    command = ["wechat", url]
+    return command + ["--headless"] if headless.strip().lower() in YES else command
+
+
+def _wechat_redirect(url: str, ask: Callable[[str], str]) -> list[str] | None:
+    """使用者把微信網址貼進音樂／影片選項時，自動改走微信那條路。
+
+    微信視頻號沒辦法用一般的網址解析下載，與其讓它失敗，不如直接轉過去——
+    使用者不該需要知道哪個選單編號對應哪個平台。
+    """
+    from .wechat import is_wechat_url
+
+    if not is_wechat_url(url):
+        return None
+    return _wechat_command(url, ask)
 
 
 def _lang_flag(flag: str, languages: str) -> list[str]:
