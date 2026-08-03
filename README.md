@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.11.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.12.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -87,6 +87,7 @@
 | 選單裡貼上網址沒反應 | [Windows Terminal 按 Ctrl+V，舊版 PowerShell 按右鍵](#最簡單的用法雙擊啟動選單) |
 | `無法讀取 <網址>：` 後面一片空白 | [1.10.0 修掉了，`git pull` 更新](#我想看到底出了什麼事) |
 | 微信視頻號「沒有回傳影片位址」 | [換個網路，或加 `--resolver`](#如果它說微信沒有回傳影片位址) |
+| `[SSL: UNEXPECTED_EOF_WHILE_READING]` | [連線被切斷，不是影片的問題](#ssl-連線被切斷) |
 
 ---
 

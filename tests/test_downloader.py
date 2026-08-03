@@ -4,7 +4,7 @@ from ytmusic.config import Config
 from ytmusic.downloader import (
     Downloader, Track, _CollectingLogger, _clean_error_text, _fallback_url,
     _final_path, _parse_rate, _rename_from_meta, _short_error, _unique_path,
-    _walk,
+    _walk, _is_network_error, _extract_over_ipv4, NETWORK_HINT,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -381,3 +381,88 @@ class TestColouredErrorMessages:
 
     def test_empty_exception_still_says_something(self):
         assert "沒有訊息" in _short_error(Exception(""))
+
+
+class TestNetworkErrorDetection:
+    """連線被切斷跟「這支影片不能下載」是兩回事，建議也完全不同。"""
+
+    def test_detects_ssl_eof(self):
+        # 使用者實際遇到的：LinkedIn 短網址在他的網路上 TLS 被切斷
+        assert _is_network_error(Exception(
+            "Unable to download webpage: [SSL: UNEXPECTED_EOF_WHILE_READING] "
+            "EOF occurred in violation of protocol (_ssl.c:1081)"))
+
+    def test_detects_connection_reset(self):
+        assert _is_network_error(Exception("<urlopen error [Errno 104] Connection reset by peer>"))
+
+    def test_detects_timeout(self):
+        assert _is_network_error(Exception("The read operation timed out"))
+
+    def test_detects_dns_failure(self):
+        assert _is_network_error(Exception("getaddrinfo failed"))
+
+    def test_ignores_content_errors(self):
+        assert not _is_network_error(Exception("Video unavailable"))
+        assert not _is_network_error(Exception("Unsupported URL: https://example.com/x"))
+
+    def test_sees_through_colour_codes(self):
+        assert _is_network_error(Exception("\x1b[0;31mERROR:\x1b[0m connection reset"))
+
+
+class TestNetworkHint:
+    def test_says_it_is_not_the_video(self):
+        assert "不是那支影片的問題" in NETWORK_HINT
+
+    def test_mentions_antivirus_tls_scanning(self):
+        # 防毒拆 TLS 是這個錯誤最常見的成因，卻最少人想到
+        assert "掃描" in NETWORK_HINT
+
+    def test_mentions_short_url_workaround(self):
+        assert "lnkd.in" in NETWORK_HINT
+
+
+class TestIpv4Retry:
+    def test_forces_ipv4_and_keeps_other_options(self, monkeypatch):
+        captured = {}
+
+        class FakeYDL:
+            def __init__(self, opts):
+                captured.update(opts)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def extract_info(self, url, download=False):
+                captured["url"] = url
+                return {"id": "x"}
+
+        import yt_dlp
+        monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+        info = _extract_over_ipv4({"proxy": "http://p", "quiet": True}, "https://x/y")
+
+        assert info == {"id": "x"}
+        assert captured["source_address"] == "0.0.0.0"  # 等同 yt-dlp 的 -4
+        assert captured["proxy"] == "http://p"          # 其他設定不能被弄丟
+
+    def test_does_not_mutate_the_caller_options(self, monkeypatch):
+        class FakeYDL:
+            def __init__(self, opts):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def extract_info(self, url, download=False):
+                return None
+
+        import yt_dlp
+        monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+        opts = {"quiet": True}
+        _extract_over_ipv4(opts, "https://x/y")
+        assert "source_address" not in opts

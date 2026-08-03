@@ -137,19 +137,28 @@ class Downloader:
         seen: set[str] = set()
         with YoutubeDL(opts) as ydl:
             for url in urls:
+                info = None
                 try:
                     info = ydl.extract_info(url, download=False)
                 except Exception as exc:
+                    failure: Exception = exc
                     fallback = _fallback_url(url, exc)
                     if fallback:
                         try:
                             info = ydl.extract_info(fallback, download=False)
                         except Exception as retry_exc:
-                            self._log(f"✖ 無法讀取 {url}："
-                                      f"{_short_error(retry_exc, logger)}")
-                            continue
-                    else:
-                        self._log(f"✖ 無法讀取 {url}：{_short_error(exc, logger)}")
+                            failure = retry_exc
+                    # 連線被中途切斷多半跟 IPv6 或中間設備有關，改走 IPv4 常常就過了。
+                    if info is None and _is_network_error(failure):
+                        self._log("  連線被中斷，改用 IPv4 再試一次…")
+                        try:
+                            info = _extract_over_ipv4(opts, fallback or url)
+                        except Exception as retry_exc:
+                            failure = retry_exc
+                    if info is None:
+                        self._log(f"✖ 無法讀取 {url}：{_short_error(failure, logger)}")
+                        if _is_network_error(failure):
+                            self._log(NETWORK_HINT)
                         continue
                 if info is None:
                     self._log(f"✖ 無法讀取 {url}")
@@ -673,6 +682,45 @@ def _clean_error_text(raw: str) -> str:
             if head:  # 切完若整句沒了就保留原文，別留下一片空白
                 message = head
     return message[:200]
+
+
+# 連不上、連到一半被切斷的特徵。這類失敗跟網址、跟 yt-dlp 版本都無關，
+# 給的建議也完全不同——不該跟「這支影片不能下載」混在一起。
+_NETWORK_MARKERS = (
+    "ssl", "eof occurred", "handshake", "connection reset", "connection aborted",
+    "connection refused", "timed out", "timeout", "temporary failure in name resolution",
+    "name or service not known", "network is unreachable", "getaddrinfo",
+    "remote end closed connection",
+)
+
+NETWORK_HINT = """  這是連線的問題，不是那支影片的問題——連到一半被切斷了。依序試：
+    1. 直接再跑一次（這種斷線常常是暫時的）
+    2. 短網址（lnkd.in、bit.ly…）換成完整網址：在瀏覽器開啟後複製網址列
+    3. 暫時關掉防毒軟體的「HTTPS／SSL 掃描」——它會拆開 TLS，常造成這個錯誤
+    4. 關掉 VPN／Proxy，或反過來用 --proxy 指定一個
+    5. 換個網路（手機熱點）"""
+
+
+def _is_network_error(exc: BaseException) -> bool:
+    """判斷失敗是不是卡在連線，而不是內容本身。"""
+    from .utils import strip_ansi
+
+    message = strip_ansi(str(exc)).lower()
+    return any(marker in message for marker in _NETWORK_MARKERS)
+
+
+def _extract_over_ipv4(opts: dict, url: str):
+    """強制走 IPv4 再解析一次（等同 yt-dlp 的 -4）。
+
+    IPv6 路由半通不通、或中間設備只擋 IPv6 時，症狀就是連線被無故切斷；
+    這時改走 IPv4 往往直接就過了。
+    """
+    from yt_dlp import YoutubeDL
+
+    retry_opts = dict(opts)
+    retry_opts["source_address"] = "0.0.0.0"
+    with YoutubeDL(retry_opts) as ydl:
+        return ydl.extract_info(url, download=False)
 
 
 # 短於這個長度的訊息幾乎無法判斷原因，補上例外型別才有線索。
