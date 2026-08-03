@@ -101,14 +101,10 @@ class TestBuildCommand:
     def test_sync(self):
         assert build_command("6", Asker()) == ["sync"]
 
-    def test_wechat_shows_window_by_default(self):
-        assert build_command("5", Asker("https://weixin.qq.com/sph/a", "")) == [
+    def test_wechat_asks_nothing_else(self):
+        # 現在是直接問微信的 API，不再需要問視窗或登入
+        assert build_command("5", Asker("https://weixin.qq.com/sph/a")) == [
             "wechat", "https://weixin.qq.com/sph/a"
-        ]
-
-    def test_wechat_headless_when_already_logged_in(self):
-        assert build_command("5", Asker("https://weixin.qq.com/sph/a", "y")) == [
-            "wechat", "https://weixin.qq.com/sph/a", "--headless"
         ]
 
     def test_wechat_blank_url_starts_login(self):
@@ -263,15 +259,10 @@ class TestWechatAutoRedirect:
     WX = "https://weixin.qq.com/sph/AJq0mgzYC0"
 
     def test_music_option_redirects(self):
-        assert build_command("1", Asker(self.WX, "")) == ["wechat", self.WX]
+        assert build_command("1", Asker(self.WX)) == ["wechat", self.WX]
 
     def test_video_option_redirects(self):
-        assert build_command("4", Asker(self.WX, "")) == ["wechat", self.WX]
-
-    def test_redirect_still_offers_headless(self):
-        assert build_command("1", Asker(self.WX, "y")) == [
-            "wechat", self.WX, "--headless"
-        ]
+        assert build_command("4", Asker(self.WX)) == ["wechat", self.WX]
 
     def test_normal_url_is_not_redirected(self):
         assert build_command("1", Asker("https://youtu.be/a", ""))[0] == "dl"

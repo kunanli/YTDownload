@@ -103,7 +103,7 @@ MENU_ITEMS = (
     MenuItem("2", "用歌名搜尋"),
     MenuItem("3", "用歌手名稱找歌"),
     MenuItem("4", "下載影片（任何網站，貼網址）"),
-    MenuItem("5", "下載微信視頻號（會開瀏覽器）"),
+    MenuItem("5", "下載微信視頻號"),
     MenuItem("6", "同步追蹤的播放清單"),
     MenuItem("7", "看下載過什麼"),
     MenuItem("8", "追蹤一張新的播放清單"),
@@ -192,10 +192,12 @@ def build_command(choice: str, ask: Callable[[str], str]) -> list[str] | None:
 
 
 def _wechat_command(url: str, ask: Callable[[str], str]) -> list[str]:
-    """組出微信視頻號的指令；第一次要看得到視窗才能掃碼登入。"""
-    headless = ask("  已經登入過了嗎？免開視窗執行 [y/Enter=顯示視窗] ")
-    command = ["wechat", url]
-    return command + ["--headless"] if headless.strip().lower() in YES else command
+    """組出微信視頻號的指令。
+
+    不再問畫質、登入或視窗——現在是直接問微信的 API 拿影片位址，
+    多數情況下連瀏覽器都不會開。真的拿不到時，指令自己會問要不要線上解析。
+    """
+    return ["wechat", url]
 
 
 def _wechat_redirect(url: str, ask: Callable[[str], str]) -> list[str] | None:

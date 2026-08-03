@@ -187,9 +187,10 @@ def _add_sync_parser(sub) -> None:
 
 def _add_wechat_parser(sub) -> None:
     p = sub.add_parser(
-        "wechat", aliases=["wx"], help="下載微信視頻號（會開瀏覽器）",
-        description="微信視頻號的網址沒辦法直接解析，這個指令會開一個瀏覽器把頁面"
-                    "載入，攔截頁面自己發出的請求來取得影片。第一次要掃碼登入。",
+        "wechat", aliases=["wx"], help="下載微信視頻號",
+        description="直接問微信的 get_feed_info API 取得影片位址並下載，多數情況"
+                    "不需要瀏覽器也不需要登入。微信不給位址時可用 --resolver "
+                    "改請線上服務代查，或 --browser 開瀏覽器試一次。",
     )
     p.add_argument("url", nargs="?", metavar="URL", help="視頻號網址")
     p.add_argument("--login", action="store_true",
@@ -201,6 +202,12 @@ def _add_wechat_parser(sub) -> None:
                    help="不顯示瀏覽器視窗（已登入過才能用，第一次登入需要看得到畫面）")
     p.add_argument("--browser", action="store_true",
                    help="即使微信已表明網頁端拿不到影片，仍然開瀏覽器試一次")
+    p.add_argument("--resolver", action="store_true",
+                   help="微信不給影片位址時，改用線上解析服務代查（會把網址送給第三方）")
+    p.add_argument("--no-resolver", dest="no_resolver", action="store_true",
+                   help="永遠不要用線上解析服務，也不要詢問")
+    p.add_argument("--resolver-url", metavar="URL",
+                   help="自訂線上解析服務的位址（可自架）")
     p.add_argument("--keep-broken", action="store_true",
                    help="即使抓到的檔案看起來不能播也保留下來")
     p.add_argument("-y", "--yes", action="store_true",
@@ -211,8 +218,9 @@ def _add_wechat_parser(sub) -> None:
 def cmd_wechat(args: argparse.Namespace) -> int:
     from .browser import BrowserUnavailable, capture_media, profile_dir
     from .wechat import (
-        ENCRYPTED_HINT, WEB_BLOCKED_HINT, MediaCandidate, CaptureResult,
-        download_media, fetch_feed_info, is_wechat_url, looks_like_playable_video,
+        DEFAULT_RESOLVER, ENCRYPTED_HINT, RESOLVER_NOTICE, WEB_BLOCKED_HINT,
+        MediaCandidate, CaptureResult, download_media, fetch_feed_info,
+        is_wechat_url, looks_like_playable_video, resolve_via_service,
         suggest_filename,
     )
 
@@ -245,11 +253,26 @@ def cmd_wechat(args: argparse.Namespace) -> int:
     # 抓得到就省下整段瀏覽器流程；拿不到也能立刻說明原因，而不是等兩分鐘才失敗。
     print("正在向微信查這支影片…", file=sys.stderr)
     feed = fetch_feed_info(args.url)
+    if feed is not None and (feed.title or feed.author):
+        print(f"  {feed.author or '（未知作者）'}｜{feed.title or '（無標題）'}",
+              file=sys.stderr)
+
+    # 同一支 API 換個出口 IP 問就可能給影片位址，所以拿不到時先問使用者要不要
+    # 讓線上服務代查——但一定要先講清楚網址會送去哪裡。
+    if (feed is None or not feed.playable) and not args.no_resolver:
+        service = args.resolver_url or DEFAULT_RESOLVER
+        if _confirm_resolver(service, assume_yes=args.resolver):
+            print("正在請線上服務代查…", file=sys.stderr)
+            remote = resolve_via_service(args.url, service=service)
+            if remote is not None and remote.playable:
+                remote.title = remote.title or (feed.title if feed else "")
+                remote.author = remote.author or (feed.author if feed else "")
+                feed = remote
+            else:
+                print("  線上服務也沒查到。", file=sys.stderr)
+
     result = None
     if feed is not None:
-        if feed.title or feed.author:
-            print(f"  {feed.author or '（未知作者）'}｜{feed.title or '（無標題）'}",
-                  file=sys.stderr)
         if feed.playable:
             result = CaptureResult(
                 url=args.url, title=feed.title, author=feed.author,
@@ -257,11 +280,10 @@ def cmd_wechat(args: argparse.Namespace) -> int:
                                            from_media_host=True)
                             for u in feed.video_urls],
             )
-            print("  微信有給影片位址，不用開瀏覽器。", file=sys.stderr)
+            print("  拿到影片位址了，不用開瀏覽器。", file=sys.stderr)
         elif not args.browser:
-            reason = feed.error_title or "網頁端沒有影片位址"
+            reason = feed.error_title or "微信沒有回傳影片位址"
             print(f"\n✖ 拿不到：{reason}\n\n{WEB_BLOCKED_HINT}", file=sys.stderr)
-            print("\n（還是想讓瀏覽器試一次的話，加 --browser）", file=sys.stderr)
             return EXIT_PRECONDITION
 
     try:
@@ -311,6 +333,26 @@ def cmd_wechat(args: argparse.Namespace) -> int:
 
     print(f"\n完成　{human_size(written)}　→ {target}", file=sys.stderr)
     return EXIT_OK
+
+
+def _confirm_resolver(service: str, *, assume_yes: bool) -> bool:
+    """問使用者要不要把網址交給第三方服務。
+
+    這一步會把資料送出本機，所以預設不做——`--resolver` 才是明示同意，
+    非互動環境（排程、腳本）一律不問也不送。
+    """
+    from .wechat import RESOLVER_NOTICE
+
+    if assume_yes:
+        return True
+    if not sys.stdin.isatty():
+        return False
+    print(f"\n{RESOLVER_NOTICE.format(service=service)}", file=sys.stderr)
+    try:
+        return input("要用線上解析代查嗎？ [y/N] ").strip().lower() in {"y", "yes", "要"}
+    except (EOFError, KeyboardInterrupt):
+        print(file=sys.stderr)
+        return False
 
 
 def _dump_observed(result) -> None:

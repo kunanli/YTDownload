@@ -4,8 +4,8 @@ from ytmusic.wechat import (
     CaptureResult, MediaCandidate, extract_video_urls, has_probable_video,
     is_feed_api, is_missing_browser_error, is_wechat_url, looks_like_media,
     looks_like_playable_video, pick_best_media, suggest_filename,
-    FEED_API_URL, WEB_BLOCKED_HINT, feed_request, parse_feed_info,
-    parse_wechat_link,
+    DEFAULT_RESOLVER, FEED_API_URL, RESOLVER_NOTICE, WEB_BLOCKED_HINT,
+    feed_request, parse_feed_info, parse_wechat_link, trim_title,
 )
 
 
@@ -411,3 +411,54 @@ class TestWebBlockedHint:
     def test_does_not_blame_the_user(self):
         # 舊訊息說「可能是還沒登入、影片沒開始播放」——實測證明都不是原因
         assert "還沒登入" not in WEB_BLOCKED_HINT
+
+
+class TestTrimTitle:
+    """視頻號只有整段貼文說明，直接當檔名會長到看不完。"""
+
+    def test_drops_trailing_hashtags(self):
+        text = "虚幻引擎的Codex时刻 #UE #虚幻引擎 #黑科技"
+        assert trim_title(text) == "虚幻引擎的Codex时刻"
+
+    def test_keeps_short_titles_intact(self):
+        assert trim_title("小貓上來了") == "小貓上來了"
+
+    def test_cuts_at_punctuation(self):
+        text = "虚幻引擎的Codex时刻，3D原生Agent来了 一句话生成整个世界。造场景、写脚本、配物理"
+        trimmed = trim_title(text)
+        assert trimmed == "虚幻引擎的Codex时刻，3D原生Agent来了 一句话生成整个世界"
+        assert len(trimmed) <= 40
+
+    def test_hard_cuts_when_no_punctuation(self):
+        assert len(trim_title("あ" * 80)) == 40
+
+    def test_first_line_only(self):
+        assert trim_title("標題\n第二行") == "標題"
+
+    def test_handles_empty(self):
+        assert trim_title("") == "" and trim_title(None) == ""
+
+
+class TestResolverIsOptIn:
+    """線上解析會把使用者的網址送出本機，說明必須講清楚。"""
+
+    def test_notice_names_the_service(self):
+        assert "{service}" in RESOLVER_NOTICE
+
+    def test_notice_says_it_is_third_party(self):
+        assert "第三方" in RESOLVER_NOTICE
+
+    def test_notice_says_credentials_are_not_sent(self):
+        assert "cookies" in RESOLVER_NOTICE
+
+    def test_default_resolver_is_https(self):
+        assert DEFAULT_RESOLVER.startswith("https://")
+
+
+class TestBlockedHintIsHonest:
+    def test_does_not_claim_impossible(self):
+        # 實測推翻了「不可能」——同一支影片換個出口 IP 就拿得到
+        assert "不可能" not in WEB_BLOCKED_HINT
+
+    def test_offers_next_steps(self):
+        assert "--resolver" in WEB_BLOCKED_HINT and "--browser" in WEB_BLOCKED_HINT

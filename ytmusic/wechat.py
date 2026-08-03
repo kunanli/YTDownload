@@ -284,20 +284,52 @@ def fetch_feed_info(url: str, *, timeout: int = 20) -> FeedInfo | None:
     return parse_feed_info(payload)
 
 
-# 為什麼 /sph/ 短連結怎麼試都抓不到——實測與前端程式碼都指向同一個結論。
-WEB_BLOCKED_HINT = """微信沒有把影片位址送到網頁端，所以瀏覽器攔不到——它從來沒被送出來。
+# 同一支 API 有時給影片位址、有時只給封面。實測：同樣的請求內容，從不同的
+# 出口 IP 問，微信回的 sceneInfo.entryScene 就不一樣（64 沒有影片、51 有），
+# 而 entryScene 是伺服器自己決定的，改請求內容改不動它。
+WEB_BLOCKED_HINT = """微信這次沒有把影片位址送回來——只給了標題、作者與封面。
 
-實測 get_feed_info 這支 API：/sph/ 分享短連結只會回標題、作者與封面，
-沒有 videoUrl；而頁面的播放器在 sph 模式下是關閉的，點下去只會跳出
-「可掃碼前往微信觀看此內容」的 QR code。再等多久、開幾次瀏覽器都一樣。
+同一支影片換個網路環境問就拿得到，所以這不是「這支影片不能下載」，
+比較像是微信按來源決定要不要給。可以試試：
 
-要拿到這支影片，目前只有這條路：
-  wechatvideodownload / wx_video_download——攔截電腦版微信「客戶端」的流量
-  並解密，需要在微信裡手動播放一次。詳見 README 的「微信視頻號」章節。
+  1. 換個網路（手機熱點、關掉 VPN／Proxy）再跑一次
+  2. 加 --resolver 用線上解析服務代查（會把網址送給第三方，見下）
+  3. 加 --browser 讓瀏覽器實際載入頁面試一次
 
-（若你手上的網址帶 ?eid=，本工具會自動改走那條路：網頁端在那個模式下是
-  允許播放的。但用你這支影片的 eid 實測，微信回的是「此內容暫時無法播放」，
-  所以不保證每支都行。）"""
+真的都不行，就只剩攔截電腦版微信客戶端流量的工具
+（wechatvideodownload / wx_channels_download），詳見 README 的「微信視頻號」章節。"""
+
+# ltaoo/wx_channels_download 公開的線上解析服務。它從自己的出口去問同一支
+# get_feed_info，因此常常拿得到我們這邊拿不到的影片位址。
+DEFAULT_RESOLVER = "https://sph.litao.workers.dev/api/fetch_video_profile"
+
+RESOLVER_NOTICE = """線上解析會把這個網址送給第三方服務：
+  {service}
+
+那是 ltaoo/wx_channels_download 提供的公開服務，不屬於本工具，也不受我們控制。
+送出去的是影片網址本身；不會送出你的 cookies 或登入資訊。"""
+
+
+def resolve_via_service(url: str, *, service: str = DEFAULT_RESOLVER,
+                        timeout: int = 30) -> "FeedInfo | None":
+    """請線上服務代查影片位址，回應形狀跟微信原本的 API 一樣。
+
+    刻意做成要明講、要同意才走：這一步會把使用者手上的網址交給第三方。
+    """
+    import json
+    import urllib.request
+
+    request = urllib.request.Request(
+        service, data=json.dumps({"url": url}).encode(),
+        headers={"content-type": "application/json",
+                 "user-agent": "ytmusic (+https://github.com/kunanli/YTDownload)"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8", "replace"))
+    except Exception:
+        return None
+    return parse_feed_info(payload)
 
 
 def is_feed_api(url: str) -> bool:
@@ -342,11 +374,34 @@ def looks_like_playable_video(head: bytes) -> bool:
     return any(head[offset:offset + len(sig)] == sig for offset, sig in _VIDEO_SIGNATURES)
 
 
+# 視頻號沒有「標題」欄位，只有整段貼文說明——直接拿來當檔名會長到看不完。
+_HASHTAG_RE = re.compile(r"#\S+")
+_TITLE_MAX = 40
+
+
+def trim_title(text: str) -> str:
+    """把整段貼文說明收成像標題的長度。
+
+    先砍掉結尾那串 hashtag（`#UE #虛幻引擎 #黑科技…` 佔掉半個檔名卻沒有資訊），
+    再從標點處截斷，實在沒有標點才硬切。
+    """
+    text = _HASHTAG_RE.sub(" ", (text or "").split("\n")[0])
+    text = " ".join(text.split()).strip(" ，,。.、|-")
+    if len(text) <= _TITLE_MAX:
+        return text
+    head = text[:_TITLE_MAX]
+    for mark in ("，", "。", "、", ",", ".", " "):
+        cut = head.rfind(mark)
+        if cut >= _TITLE_MAX // 2:
+            return head[:cut].strip()
+    return head.strip()
+
+
 def suggest_filename(title: str, author: str) -> str:
     """依標題與作者組出檔名（不含副檔名）。"""
     from .utils import sanitize_filename
 
-    title = (title or "").strip()
+    title = trim_title(title)
     author = (author or "").strip()
     if author and title:
         stem = f"{author} - {title}"
