@@ -229,8 +229,10 @@ def cmd_wechat(args: argparse.Namespace) -> int:
 
     best = result.best
     if best is None:
-        print(f"沒有攔截到影片。可能是還沒登入、影片沒開始播放，或微信改了做法。\n"
-              f"登入狀態存在：{profile_dir()}", file=sys.stderr)
+        print("沒有攔截到影片。可能是還沒登入、影片沒開始播放，或微信改了做法。",
+              file=sys.stderr)
+        _dump_observed(result)
+        print(f"登入狀態存在：{profile_dir()}", file=sys.stderr)
         return EXIT_PRECONDITION
 
     stem = suggest_filename(result.title, result.author)
@@ -254,6 +256,7 @@ def cmd_wechat(args: argparse.Namespace) -> int:
         head = handle.read(16)
     if not looks_like_playable_video(head):
         print(f"\n⚠ {ENCRYPTED_HINT}", file=sys.stderr)
+        _dump_observed(result)
         if not args.keep_broken:
             target.unlink(missing_ok=True)
             print("\n（檔案已刪除，要保留請加 --keep-broken）", file=sys.stderr)
@@ -261,6 +264,22 @@ def cmd_wechat(args: argparse.Namespace) -> int:
 
     print(f"\n完成　{human_size(written)}　→ {target}", file=sys.stderr)
     return EXIT_OK
+
+
+def _dump_observed(result) -> None:
+    """把頁面發出的請求列出來。
+
+    抓錯或抓不到時，這是唯一能判斷「頁面到底要了什麼」的線索；
+    沒有它就只能瞎猜。
+    """
+    if not result.observed:
+        print("\n（沒有攔截到任何請求）", file=sys.stderr)
+        return
+    print(f"\n頁面共發出 {len(result.observed)} 個請求，最大的幾個：",
+          file=sys.stderr)
+    for candidate in result.observed[:12]:
+        print(f"  {candidate.describe()}", file=sys.stderr)
+    print("\n如果上面看得到像影片的網址，請把這段貼給開發者。", file=sys.stderr)
 
 
 def _add_history_parser(sub) -> None:

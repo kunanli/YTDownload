@@ -26,10 +26,19 @@ WECHAT_PAGE_HOSTS = (
 # 影片實際放在騰訊的 CDN 上，網域跟頁面不同。
 WECHAT_MEDIA_HOSTS = (
     "finder.video.qq.com",
-    "wxapp.tc.qq.com",
     "findervideo.tc.qq.com",
-    "vweixinthumb.tc.qq.com",
+    "wxapp.tc.qq.com",
 )
+
+# 同樣在騰訊 CDN 上，但放的是縮圖／封面，不是影片。
+# （vweixinthumb 的 thumb 就是縮圖——曾誤列進上面那組，導致抓到 47 KB 的封面。）
+WECHAT_THUMB_HOSTS = (
+    "vweixinthumb.tc.qq.com",
+    "wxapp.tc.qq.com/thumb",
+)
+
+# 視頻號的影片至少都有幾百 KB；比這小的幾乎一定是封面或探測請求。
+MIN_VIDEO_BYTES = 300 * 1024
 
 _MEDIA_EXT_RE = re.compile(r"\.(mp4|m4v|mov|flv|m3u8|ts)(\?|$)", re.IGNORECASE)
 _MEDIA_TYPE_RE = re.compile(r"^(video|application/(x-mpegurl|vnd\.apple\.mpegurl|octet-stream))",
@@ -57,6 +66,33 @@ class MediaCandidate:
     def is_playlist(self) -> bool:
         return ".m3u8" in self.url.lower()
 
+    @property
+    def is_thumbnail(self) -> bool:
+        """封面／縮圖：主機名稱帶 thumb，或宣告成圖片。"""
+        lowered = self.url.lower()
+        if any(marker in lowered for marker in WECHAT_THUMB_HOSTS):
+            return True
+        return self.content_type.lower().startswith("image/")
+
+    @property
+    def is_big_enough(self) -> bool:
+        """大小看起來像真的影片。0 代表伺服器沒給長度，不當作否定證據。"""
+        return self.size == 0 or self.size >= MIN_VIDEO_BYTES
+
+    def describe(self) -> str:
+        from .utils import human_size
+
+        marks = []
+        if self.from_media_host:
+            marks.append("CDN")
+        if self.is_thumbnail:
+            marks.append("縮圖")
+        if self.is_playlist:
+            marks.append("m3u8")
+        tag = f"[{'/'.join(marks)}] " if marks else ""
+        size = human_size(self.size) if self.size else "未知大小"
+        return f"{tag}{size}  {self.content_type or '?'}  {self.url[:110]}"
+
 
 @dataclass
 class CaptureResult:
@@ -66,6 +102,8 @@ class CaptureResult:
     title: str = ""
     author: str = ""
     candidates: list[MediaCandidate] = field(default_factory=list)
+    # 頁面發出的所有請求，抓不到影片時用來診斷。
+    observed: list[MediaCandidate] = field(default_factory=list)
     cookies: dict = field(default_factory=dict)
     needs_login: bool = False
 
@@ -102,13 +140,15 @@ def looks_like_media(url: str, content_type: str = "") -> bool:
 def pick_best_media(candidates: list[MediaCandidate]) -> MediaCandidate | None:
     """從擷取到的來源中挑最可能是「完整影片」的那一個。
 
-    優先序：騰訊影片 CDN > 檔案大 > 直接的 mp4（而非 m3u8 分段清單）。
-    縮圖和預覽圖通常很小，會自然排到後面。
+    先排除封面／縮圖（曾經因此抓到 47 KB 的圖片當影片），再依
+    「大小像影片 > 騰訊影片 CDN > 檔案大 > 直接 mp4」排序。
     """
-    usable = [c for c in candidates if c.url]
+    usable = [c for c in candidates if c.url and not c.is_thumbnail]
     if not usable:
         return None
-    return max(usable, key=lambda c: (c.from_media_host, c.size, not c.is_playlist))
+    # 大小夠像影片的優先；全都太小時仍回傳最大的那個，讓後續的容器檢查去擋。
+    return max(usable, key=lambda c: (c.is_big_enough, c.from_media_host,
+                                      c.size, not c.is_playlist))
 
 
 def looks_like_playable_video(head: bytes) -> bool:

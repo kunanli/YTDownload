@@ -109,20 +109,28 @@ def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
 
     result = CaptureResult(url=url)
     seen: dict[str, MediaCandidate] = {}
+    everything: dict[str, MediaCandidate] = {}
 
     def on_response(response) -> None:
         try:
             headers = response.headers
             content_type = headers.get("content-type", "")
-            if not looks_like_media(response.url, content_type):
-                return
             host = response.url.split("//", 1)[-1].split("/", 1)[0].split(":")[0]
-            seen[response.url] = MediaCandidate(
+            # Range 請求會把同一支影片切成很多段，各段的 content-length 只是片段
+            # 大小；用 content-range 的總長度才問得出真正的檔案大小。
+            size = _total_size(headers)
+            candidate = MediaCandidate(
                 url=response.url,
                 content_type=content_type,
-                size=int(headers.get("content-length") or 0),
+                size=size,
                 from_media_host=any(host.endswith(h) for h in WECHAT_MEDIA_HOSTS),
             )
+            previous = everything.get(response.url)
+            if previous is None or size > previous.size:
+                everything[response.url] = candidate
+            if looks_like_media(response.url, content_type):
+                if previous is None or size > seen.get(response.url, candidate).size:
+                    seen[response.url] = candidate
         except Exception:
             pass  # 攔截失敗不該中斷整個流程
 
@@ -195,7 +203,21 @@ def capture_media(url: str, *, timeout: int = 120, headless: bool = False,
             context.close()
 
     result.candidates = list(seen.values())
+    result.observed = sorted(everything.values(), key=lambda c: -c.size)
     return result
+
+
+def _total_size(headers: dict) -> int:
+    """從 content-range（優先）或 content-length 取出檔案總長度。"""
+    content_range = headers.get("content-range") or ""
+    if "/" in content_range:
+        total = content_range.rsplit("/", 1)[-1].strip()
+        if total.isdigit():
+            return int(total)
+    try:
+        return int(headers.get("content-length") or 0)
+    except ValueError:
+        return 0
 
 
 def _text(page, selector: str) -> str:

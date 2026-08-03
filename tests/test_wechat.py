@@ -61,11 +61,18 @@ class TestLooksLikeMedia:
 
 
 class TestPickBestMedia:
-    def test_prefers_tencent_cdn_over_bigger_file(self):
-        others = MediaCandidate("https://other.com/big.mp4", size=99_000_000)
-        cdn = MediaCandidate("https://finder.video.qq.com/a", size=1000,
+    def test_prefers_tencent_cdn_when_both_look_like_videos(self):
+        other = MediaCandidate("https://other.com/big.mp4", size=5_000_000)
+        cdn = MediaCandidate("https://finder.video.qq.com/a", size=4_000_000,
                              from_media_host=True)
-        assert pick_best_media([others, cdn]) is cdn
+        assert pick_best_media([other, cdn]) is cdn
+
+    def test_tiny_cdn_response_loses_to_a_real_video(self):
+        # 這正是使用者踩到的：47 KB 的 CDN 回應被當成影片抓走
+        tiny_cdn = MediaCandidate("https://finder.video.qq.com/a", size=48_000,
+                                  from_media_host=True)
+        real = MediaCandidate("https://other.com/big.mp4", size=99_000_000)
+        assert pick_best_media([tiny_cdn, real]) is real
 
     def test_prefers_larger_among_same_host(self):
         small = MediaCandidate("https://finder.video.qq.com/a", size=1000,
@@ -178,3 +185,56 @@ class TestInstallCommands:
                 raise AssertionError(f"提示不該叫使用者直接打：{stripped}")
         assert "python -m playwright install chromium" in PLAYWRIGHT_HINT
         assert "python -m pip install playwright" in PLAYWRIGHT_HINT
+
+
+class TestThumbnailsAreNotVideos:
+    """使用者實測時抓到 46.9 KiB 的封面當影片——vweixinthumb 是縮圖主機。"""
+
+    def test_thumb_host_is_recognised(self):
+        assert MediaCandidate("https://vweixinthumb.tc.qq.com/abc").is_thumbnail
+
+    def test_image_content_type_is_a_thumbnail(self):
+        assert MediaCandidate("https://x.com/a", content_type="image/jpeg").is_thumbnail
+
+    def test_video_cdn_is_not_a_thumbnail(self):
+        assert not MediaCandidate("https://finder.video.qq.com/abc").is_thumbnail
+
+    def test_thumbnail_is_never_picked(self):
+        thumb = MediaCandidate("https://vweixinthumb.tc.qq.com/a", size=48_000,
+                               from_media_host=True)
+        assert pick_best_media([thumb]) is None
+
+    def test_real_video_beats_thumbnail(self):
+        thumb = MediaCandidate("https://vweixinthumb.tc.qq.com/a", size=48_000,
+                               from_media_host=True)
+        video = MediaCandidate("https://finder.video.qq.com/v", size=5_000_000,
+                               from_media_host=True)
+        assert pick_best_media([thumb, video]) is video
+
+
+class TestSizeHeuristic:
+    def test_tiny_response_is_not_big_enough(self):
+        assert not MediaCandidate("https://x/a.mp4", size=48_000).is_big_enough
+
+    def test_real_video_is_big_enough(self):
+        assert MediaCandidate("https://x/a.mp4", size=5_000_000).is_big_enough
+
+    def test_unknown_size_is_not_held_against_it(self):
+        # 伺服器沒給 content-length 時不該當成否定證據
+        assert MediaCandidate("https://x/a.mp4", size=0).is_big_enough
+
+    def test_big_plain_host_beats_small_cdn(self):
+        small_cdn = MediaCandidate("https://finder.video.qq.com/a", size=50_000,
+                                   from_media_host=True)
+        big_other = MediaCandidate("https://other.com/a.mp4", size=9_000_000)
+        assert pick_best_media([small_cdn, big_other]) is big_other
+
+
+class TestDescribe:
+    def test_marks_cdn_and_size(self):
+        text = MediaCandidate("https://finder.video.qq.com/a", content_type="video/mp4",
+                              size=5_000_000, from_media_host=True).describe()
+        assert "CDN" in text and "MiB" in text and "video/mp4" in text
+
+    def test_marks_thumbnail(self):
+        assert "縮圖" in MediaCandidate("https://vweixinthumb.tc.qq.com/a").describe()

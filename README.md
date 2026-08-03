@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.6.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.7.0** ｜ [更新紀錄](CHANGELOG.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
