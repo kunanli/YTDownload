@@ -12,6 +12,8 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass
 
+from .i18n import t
+
 OK = "✔"
 BAD = "✖"
 WARN = "!"
@@ -42,19 +44,21 @@ def impersonation_status() -> tuple[bool, str]:
     try:
         import curl_cffi
     except ImportError:
-        return False, f'沒有安裝　→　python -m pip install "{CURL_CFFI_SPEC}"'
+        return False, t("dep.not_installed",
+                        command=f'python -m pip install "{CURL_CFFI_SPEC}"')
 
     version = getattr(curl_cffi, "__version__", "?")
     try:
         from yt_dlp.networking._curlcffi import CurlCFFIRH  # noqa: F401
     except Exception as exc:
-        return False, f"{version}　但 yt-dlp 載入失敗：{str(exc)[:60]}"
+        return False, t("dep.load_failed", version=version, error=str(exc)[:60])
 
     marked = getattr(curl_cffi, "_yt_dlp__version", "")
     if "unsupported" in marked:
-        return False, (f'{version} 不在 yt-dlp 支援範圍　→　'
-                       f'python -m pip install "{CURL_CFFI_SPEC}"')
-    return True, f"{version}　可用（{_targets() or '沒有可用目標'}）"
+        return False, t("dep.unsupported", version=version,
+                        command=f'python -m pip install "{CURL_CFFI_SPEC}"')
+    return True, t("dep.usable", version=version,
+                   targets=_targets() or t("dep.no_targets"))
 
 
 def _targets(limit: int = 4) -> str:
@@ -85,14 +89,14 @@ def environment() -> list[Check]:
 
     ffmpeg = find_ffmpeg()
     checks.append(Check("ffmpeg", OK, ffmpeg) if ffmpeg
-                  else Check("ffmpeg", BAD, "找不到　→　轉檔與影片合併會失敗"))
+                  else Check("ffmpeg", BAD, t("dep.ffmpeg_missing")))
 
     try:
         import mutagen
 
         checks.append(Check("mutagen", OK, mutagen.version_string))
     except Exception:
-        checks.append(Check("mutagen", WARN, "沒有安裝　→　寫不了標籤與封面"))
+        checks.append(Check("mutagen", WARN, t("dep.mutagen_missing")))
 
     available, detail = impersonation_status()
     checks.append(Check("curl_cffi", OK if available else WARN, detail))
@@ -100,9 +104,9 @@ def environment() -> list[Check]:
     try:
         import playwright  # noqa: F401
 
-        checks.append(Check("playwright", OK, "已安裝（微信瀏覽器模式可用）"))
+        checks.append(Check("playwright", OK, t("dep.playwright_yes")))
     except ImportError:
-        checks.append(Check("playwright", WARN, "沒有安裝（只有微信瀏覽器模式需要）"))
+        checks.append(Check("playwright", WARN, t("dep.playwright_no")))
 
     return checks
 
@@ -113,11 +117,11 @@ def probes(config) -> list[tuple[str, str, dict]]:
     from .downloader import impersonate_target
 
     result = [
-        ("一般連線", "跟平常一樣", {}),
-        ("強制 IPv4", "治路由半通不通", {"source_address": "0.0.0.0"}),
+        (t("probe.plain"), "", {}),
+        (t("probe.ipv4"), "", {"source_address": "0.0.0.0"}),
     ]
     if impersonation_status()[0]:
-        result.append(("假扮瀏覽器", "治對方看 TLS 指紋擋人",
+        result.append((t("probe.impersonate"), "",
                        {"impersonate": impersonate_target("chrome")}))
     return result
 
@@ -137,14 +141,14 @@ def probe_url(url: str, config, *, out=None) -> list[Check]:
 
     def attempt(name: str, target: str, extra: dict) -> Check:
         logger = _CollectingLogger()
-        print(f"  測試 {name}…", file=out, flush=True)
+        print(t("doctor.trying", name=name), file=out, flush=True)
         try:
             with YoutubeDL({**base, **extra, "logger": logger}) as ydl:
                 info = ydl.extract_info(target, download=False)
         except Exception as exc:
             return Check(name, BAD, _short_error(exc, logger)[:110])
         title = (info or {}).get("title") or (info or {}).get("id") or "（沒有標題）"
-        return Check(name, OK, f"讀得到：{title[:60]}")
+        return Check(name, OK, t("doctor.readable", title=title[:60]))
 
     results = [attempt(name, url, extra) for name, _, extra in probes(config)]
 
@@ -152,7 +156,7 @@ def probe_url(url: str, config, *, out=None) -> list[Check]:
     # 「整個站台連不上」的處置完全不同——分開測才分得出來。
     full = _expanded(url, out=out)
     if full:
-        results.append(attempt("完整網址", full, {}))
+        results.append(attempt(t("probe.full_url"), full, {}))
     return results
 
 
@@ -184,21 +188,18 @@ def conclusion(results: list[Check]) -> str:
         return ""
     winners = [c for c in results if c.mark == OK]
     if not winners:
-        return ("三種方式都連不上。這條網路到這個站台是不通的——"
-                "換個網路（手機熱點）再跑一次 doctor，就能確定是網路還是站台的問題。")
+        return t("conclusion.none")
     labels = {c.label for c in winners}
-    blocked_short = "完整網址" in labels and not (labels - {"完整網址"})
+    full_url = t("probe.full_url")
+    blocked_short = full_url in labels and not (labels - {full_url})
     if blocked_short:
-        return ("只有完整網址通得了——被擋的是短網址那個網域本身，不是這個站台。\n"
-                "  下載時加 --expand 會自動換成完整網址，或自己在瀏覽器開一次短網址、"
-                "複製網址列那串長的。")
+        return t("conclusion.short_blocked")
     first = winners[0].label
-    if first == "一般連線":
-        return "一般連線就通了。剛才的失敗多半是暫時的，直接重跑下載即可。"
-    if first == "強制 IPv4":
-        return "強制 IPv4 才通，代表 IPv6 那條路有問題——下載時會自動改走，不用特別設定。"
-    return ("只有假扮瀏覽器才通，代表對方在看 TLS 指紋擋非瀏覽器。\n"
-            "  固定用這招：python -m ytmusic config set impersonate chrome")
+    if first == t("probe.plain"):
+        return t("conclusion.plain")
+    if first == t("probe.ipv4"):
+        return t("conclusion.ipv4")
+    return t("conclusion.impersonate")
 
 
 def missing_advice(checks: list[Check]) -> list[str]:

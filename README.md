@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.17.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.18.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -186,10 +186,30 @@ Mac 的 `下載.command` 流程完全一樣。
 python -m ytmusic config set ui_language ja     # zh-Hant, ja, en, ko, es, fi
 ```
 
-> **翻譯到哪裡為止。** 雙擊啟動之後看到的所有文字（選單、提示、缺相依的詢問）
-> 都翻譯了。下載過程的進度與錯誤訊息目前還是中文 —— 它們用同一套機制，之後可以補上。
-> `下載.bat` 自己那三句訊息刻意維持英文：`cmd.exe` 會在 Python 啟動前就把非 ASCII
-> 文字弄壞。
+**指令列也一樣**——`dl`、`doctor`、`wechat` 的輸出都跟著設定走：
+
+```
+$ python -m ytmusic dl "https://youtu.be/..." --dry-run     # ui_language = ko
+URL 분석 중…
+총 1개 중 1개 다운로드
+출력: /Users/you/Music/ytmusic   형식: mp3 @ 192   동시: 3
+```
+
+失敗時的**解釋**也翻譯了，這其實才是重點：
+
+```
+$ python -m ytmusic dl "https://example.com/nope"           # ui_language = es
+Analizando la URL…
+✖ No se pudo leer https://example.com/nope: HTTP Error 404: Not Found
+No se encontró nada que descargar.
+```
+
+> **沒翻的只有兩處，都是刻意的。** `--help` 的參數說明（打指令的人本來就在讀
+> 英文旗標），以及 `下載.bat` 自己那三句訊息 —— `cmd.exe` 會在 Python 啟動前
+> 就把非 ASCII 文字弄壞。
+>
+> 沒設定過語言時會**照系統語系自動選**（`LANG=ko_KR.UTF-8` → 韓文），
+> 認不出來就用英文。設定檔裡選過的永遠優先。
 
 ### 選單怎麼決定平台
 

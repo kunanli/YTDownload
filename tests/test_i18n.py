@@ -111,3 +111,40 @@ class TestDetect:
 
     def test_lc_all_wins(self):
         assert detect({"LC_ALL": "fi_FI.UTF-8", "LANG": "ja_JP"}) == "fi"
+
+
+class TestExplanationsAreTranslated:
+    """切了語言卻只有選單變，等於沒切——真正要看懂的是失敗時那幾行。"""
+
+    @pytest.fixture(autouse=True)
+    def restore(self):
+        before = language()
+        yield
+        set_language(before)
+
+    def test_download_flow_follows_the_language(self):
+        set_language("en")
+        assert t("dl.resolving", what=t("noun.url")) == "Resolving the URL…"
+        assert t("dl.nothing") == "Nothing found to download."
+        assert t("dl.plan", total=3, pending=2) == "3 found, 2 to download"
+
+    def test_failure_lines_follow_the_language(self):
+        set_language("es")
+        assert t("err.unreadable", url="x", error="y").startswith("✖ No se pudo leer")
+        assert "conexión" in t("net.hint")
+
+    def test_doctor_follows_the_language(self):
+        set_language("fi")
+        assert t("doctor.env") == "Ympäristön tarkistus"
+        assert "verko" in t("conclusion.none")  # 芬蘭語會變格：verkosta / verkossa
+
+    def test_wechat_follows_the_language(self):
+        set_language("ko")
+        assert t("wx.asking").startswith("위챗")
+        assert "위챗" in t("wx.blocked_hint")
+
+    def test_long_hints_exist_in_every_language(self):
+        # 這幾段是失敗時唯一的線索，缺譯會讓使用者卡死
+        for key in ("net.hint", "wx.blocked_hint", "conclusion.short_blocked"):
+            for code in LANGUAGE_CODES:
+                assert len(MESSAGES[key][code]) > 40, f"{key}/{code}"

@@ -16,6 +16,7 @@ from .tagger import (
     TaggingError, TrackMeta, apply_tags, build_metadata, fetch_cover,
     pick_thumbnail_url,
 )
+from .i18n import t
 from .utils import (
     FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filename,
     strip_ansi, vimeo_player_url,
@@ -124,19 +125,19 @@ class Downloader:
         from .shorturl import is_short_url
 
         attempts: list[tuple[str, callable]] = [
-            ("改用 IPv4", lambda: _extract_over_ipv4(opts, url)),
+            (t("retry.ipv4"), lambda: _extract_over_ipv4(opts, url)),
         ]
         if not self.impersonate and impersonation_available():
-            attempts.append(("假扮成瀏覽器的 TLS 指紋",
+            attempts.append((t("retry.impersonate"),
                              lambda: _extract_impersonating(opts, url)))
         # 擋住連線的很可能就是短網址那個網域本身（lnkd.in 在很多封鎖清單上）。
         # 換成它指向的完整網址，就整個繞過去了。
         if self.expander and is_short_url(url):
-            attempts.append(("把短網址換成完整網址",
+            attempts.append((t("retry.expand"),
                              lambda: self._extract_expanded(opts, url)))
 
         for label, attempt in attempts:
-            self._log(f"  連線被中斷，{label}，再試一次…")
+            self._log(t("retry.cut", how=label))
             try:
                 info = attempt()
             except Exception as exc:
@@ -201,14 +202,15 @@ class Downloader:
                         info, failure = self._retry_network(opts, fallback or url,
                                                             failure)
                     if info is None:
-                        self._log(f"✖ 無法讀取 {url}：{_short_error(failure, logger)}")
+                        self._log(t("err.unreadable", url=url,
+                                    error=_short_error(failure, logger)))
                         if _is_network_error(failure):
-                            self._log(NETWORK_HINT)
+                            self._log(t("net.hint"))
                             if not self.impersonate and not impersonation_available():
                                 self._log(IMPERSONATE_HINT)
                         continue
                 if info is None:
-                    self._log(f"✖ 無法讀取 {url}")
+                    self._log(t("err.unreadable_bare", url=url))
                     continue
                 for track in _walk(info):
                     if track.video_id in seen:

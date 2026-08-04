@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.17.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.18.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.
@@ -183,11 +183,33 @@ without the menu:
 python -m ytmusic config set ui_language en     # zh-Hant, ja, en, ko, es, fi
 ```
 
-> **What is and isn't translated.** The menu — everything you see after double-clicking
-> the launcher — is fully translated, including the dependency prompts. Download progress
-> and error messages are still in Chinese; they use the same mechanism and can be added.
-> The three messages inside `下載.bat` itself stay English on purpose: `cmd.exe` mangles
-> non-ASCII text before Python ever starts.
+**The command line follows it too** — `dl`, `doctor` and `wechat` all print in your
+chosen language:
+
+```
+$ python -m ytmusic dl "https://youtu.be/..." --dry-run     # ui_language = ko
+URL 분석 중…
+총 1개 중 1개 다운로드
+출력: /Users/you/Music/ytmusic   형식: mp3 @ 192   동시: 3
+```
+
+The **explanations you get when something fails** are translated as well, which is really
+the point:
+
+```
+$ python -m ytmusic dl "https://example.com/nope"           # ui_language = es
+Analizando la URL…
+✖ No se pudo leer https://example.com/nope: HTTP Error 404: Not Found
+No se encontró nada que descargar.
+```
+
+> **Only two things stay untranslated, both on purpose.** The `--help` text for command
+> flags (if you're typing commands you're already reading English flag names), and the
+> three messages inside `下載.bat` itself — `cmd.exe` mangles non-ASCII before Python
+> ever starts.
+>
+> If you've never picked a language, it **follows your system locale**
+> (`LANG=ko_KR.UTF-8` → Korean), falling back to English. An explicit setting always wins.
 
 ### How the menu picks a platform
 

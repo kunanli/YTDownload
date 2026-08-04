@@ -12,6 +12,7 @@ from . import __version__
 from .config import AUDIO_FORMATS, QUALITIES, Config, coerce_value
 from .downloader import DownloadAborted, Downloader, Result, Track
 from .history import History, default_history_path
+from .i18n import t
 from .progress import ProgressReporter
 from .search import (
     SelectionError, filter_by_artist, format_results, parse_selection,
@@ -75,11 +76,20 @@ def _add_menu_parser(sub) -> None:
 
 
 def cmd_menu(args: argparse.Namespace) -> int:
-    from .i18n import set_language
     from .menu import run_menu
 
-    set_language(Config.load().ui_language)
     return run_menu()
+
+
+def _apply_language() -> None:
+    """套用使用者選過的介面語言；沒選過就照系統設定猜一個。"""
+    from .i18n import detect, set_language
+
+    try:
+        chosen = Config.load().ui_language
+    except Exception:
+        chosen = ""
+    set_language(chosen or detect())
 
 
 def _add_download_parser(sub) -> None:
@@ -210,27 +220,27 @@ def cmd_doctor(args: argparse.Namespace) -> int:
     from .doctor import conclusion, environment, missing_advice, probe_url
 
     checks = environment()
-    print("環境檢查", file=sys.stderr)
+    print(t("doctor.env"), file=sys.stderr)
     for check in checks:
         print(check.line(), file=sys.stderr)
 
     problems = missing_advice(checks)
     if problems:
-        print("\n要處理的：", file=sys.stderr)
+        print(f"\n{t('doctor.todo')}", file=sys.stderr)
         for problem in problems:
             print(f"  · {problem}", file=sys.stderr)
 
     if not args.url:
-        print("\n想知道某個網址為什麼連不上，把網址接在後面："
-              "\n  python -m ytmusic doctor \"網址\"", file=sys.stderr)
+        print(f"\n{t('doctor.url_hint')}"
+              '\n  python -m ytmusic doctor "<URL>"', file=sys.stderr)
         return EXIT_OK if not problems else EXIT_PRECONDITION
 
-    print(f"\n連線測試：{args.url}", file=sys.stderr)
+    print(f"\n{t('doctor.testing', url=args.url)}", file=sys.stderr)
     results = probe_url(args.url, Config.load())
     print(file=sys.stderr)
     for check in results:
         print(check.line(), file=sys.stderr)
-    print(f"\n結論：{conclusion(results)}", file=sys.stderr)
+    print(f"\n{t('doctor.conclusion', text=conclusion(results))}", file=sys.stderr)
     return EXIT_OK if any(c.mark == "\u2714" for c in results) else EXIT_FAILED
 
 
@@ -300,10 +310,10 @@ def cmd_wechat(args: argparse.Namespace) -> int:
 
     # 先直接問微信的 API：不必開瀏覽器，一秒就知道這支影片拿不拿得到。
     # 抓得到就省下整段瀏覽器流程；拿不到也能立刻說明原因，而不是等兩分鐘才失敗。
-    print("正在向微信查這支影片…", file=sys.stderr)
+    print(t("wx.asking"), file=sys.stderr)
     feed = fetch_feed_info(args.url)
     if feed is not None and (feed.title or feed.author):
-        print(f"  {feed.author or '（未知作者）'}｜{feed.title or '（無標題）'}",
+        print(f"  {feed.author or t('wx.unknown_author')}｜{feed.title or t('wx.untitled')}",
               file=sys.stderr)
 
     # 同一支 API 換個出口 IP 問就可能給影片位址，所以拿不到時先問使用者要不要
@@ -311,14 +321,14 @@ def cmd_wechat(args: argparse.Namespace) -> int:
     if (feed is None or not feed.playable) and not args.no_resolver:
         service = args.resolver_url or DEFAULT_RESOLVER
         if _confirm_resolver(service, assume_yes=args.resolver):
-            print("正在請線上服務代查…", file=sys.stderr)
+            print(t("wx.resolver_asking"), file=sys.stderr)
             remote = resolve_via_service(args.url, service=service)
             if remote is not None and remote.playable:
                 remote.title = remote.title or (feed.title if feed else "")
                 remote.author = remote.author or (feed.author if feed else "")
                 feed = remote
             else:
-                print("  線上服務也沒查到。", file=sys.stderr)
+                print(t("wx.resolver_none"), file=sys.stderr)
 
     result = None
     if feed is not None:
@@ -329,10 +339,11 @@ def cmd_wechat(args: argparse.Namespace) -> int:
                                            from_media_host=True)
                             for u in feed.video_urls],
             )
-            print("  拿到影片位址了，不用開瀏覽器。", file=sys.stderr)
+            print(t("wx.got_url"), file=sys.stderr)
         elif not args.browser:
-            reason = feed.error_title or "微信沒有回傳影片位址"
-            print(f"\n✖ 拿不到：{reason}\n\n{WEB_BLOCKED_HINT}", file=sys.stderr)
+            reason = feed.error_title or t("wx.no_url_reason")
+            print(f"\n{t('wx.cant', reason=reason)}\n\n{t('wx.blocked_hint')}",
+                  file=sys.stderr)
             return EXIT_PRECONDITION
 
     try:
@@ -343,19 +354,19 @@ def cmd_wechat(args: argparse.Namespace) -> int:
         print(str(exc), file=sys.stderr)
         return EXIT_PRECONDITION
     except KeyboardInterrupt:
-        print("\n已中斷。", file=sys.stderr)
+        print(f"\n{t('interrupted')}", file=sys.stderr)
         return EXIT_INTERRUPTED
 
     best = result.best
     if best is None:
-        print(f"沒有攔截到影片。\n\n{WEB_BLOCKED_HINT}", file=sys.stderr)
+        print(f"{t('wx.blocked_hint')}", file=sys.stderr)
         _dump_observed(result)
         print(f"登入狀態存在：{profile_dir()}", file=sys.stderr)
         return EXIT_PRECONDITION
 
     stem = suggest_filename(result.title, result.author)
     target = output_dir / f"{stem}.mp4"
-    print(f"\n找到影片，開始下載 → {target.name}", file=sys.stderr)
+    print(f"\n{t('wx.found', name=target.name)}", file=sys.stderr)
 
     def show(done: int, total: int) -> None:
         if total:
@@ -366,7 +377,7 @@ def cmd_wechat(args: argparse.Namespace) -> int:
         written = download_media(best, target, cookies=result.cookies,
                                  referer=args.url, progress=show)
     except Exception as exc:
-        print(f"\n下載失敗：{str(exc)[:150]}", file=sys.stderr)
+        print(f"\n{t('wx.dl_failed', error=str(exc)[:150])}", file=sys.stderr)
         return EXIT_FAILED
     print(file=sys.stderr)
 
@@ -380,7 +391,7 @@ def cmd_wechat(args: argparse.Namespace) -> int:
             print("\n（檔案已刪除，要保留請加 --keep-broken）", file=sys.stderr)
             return EXIT_FAILED
 
-    print(f"\n完成　{human_size(written)}　→ {target}", file=sys.stderr)
+    print(f"\n{t('wx.done', size=human_size(written), path=target)}", file=sys.stderr)
     return EXIT_OK
 
 
@@ -398,7 +409,7 @@ def _confirm_resolver(service: str, *, assume_yes: bool) -> bool:
         return False
     print(f"\n{RESOLVER_NOTICE.format(service=service)}", file=sys.stderr)
     try:
-        return input("要用線上解析代查嗎？ [y/N] ").strip().lower() in {"y", "yes", "要"}
+        return input(f"{t('wx.resolver_ask')}[y/N] ").strip().lower() in {"y", "yes", "要"}
     except (EOFError, KeyboardInterrupt):
         print(file=sys.stderr)
         return False
@@ -557,7 +568,7 @@ def _short_url_expander(urls: list[str], args: argparse.Namespace, config: Confi
             agreed["asked"] = True
             print(f"\n{EXPANDER_NOTICE.format(service=service)}", file=sys.stderr)
             try:
-                answer = input("  要展開短網址再試一次嗎？ [Y/n] ").strip().lower()
+                answer = input(f"  {t('short.ask')}[Y/n] ").strip().lower()
             except (EOFError, KeyboardInterrupt):
                 print(file=sys.stderr)
                 return ""
@@ -579,7 +590,7 @@ def _remember_expand() -> None:
     if not sys.stdin.isatty():
         return
     try:
-        answer = input("  以後遇到短網址都自動展開嗎？ [Y/n] ").strip().lower()
+        answer = input(f"  {t('short.remember')}[Y/n] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         print(file=sys.stderr)
         return
@@ -588,11 +599,9 @@ def _remember_expand() -> None:
     try:
         path = Config.load().merged(expand_short_urls=True).save()
     except OSError as exc:
-        print(f"  記不起來（{exc}）——下次還是會問。", file=sys.stderr)
+        print(f"  {t('short.save_failed', error=exc)}", file=sys.stderr)
         return
-    print(f"  好，記住了：{path}\n"
-          f"  想取消：python -m ytmusic config set expand_short_urls false",
-          file=sys.stderr)
+    print(f"  {t('short.saved', path=path)}", file=sys.stderr)
 
 
 def _langs(flag: str | None, config: Config) -> str | None:
@@ -637,10 +646,10 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
         return EXIT_PRECONDITION
 
     try:
-        print(f"正在解析{label or '網址'}…", file=sys.stderr)
+        print(t("dl.resolving", what=label or t("noun.url")), file=sys.stderr)
         tracks = downloader.expand(urls, single=single)
         if not tracks:
-            print("沒有找到可下載的曲目。", file=sys.stderr)
+            print(t("dl.nothing"), file=sys.stderr)
             return EXIT_PRECONDITION
 
         pending, skipped = downloader.filter_new(tracks, force=args.force)
@@ -660,7 +669,7 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
         with reporter:
             results = downloader.run(pending)
     except KeyboardInterrupt:
-        print("\n已中斷。", file=sys.stderr)
+        print(f"\n{t('interrupted')}", file=sys.stderr)
         return EXIT_INTERRUPTED
     finally:
         if history:
@@ -671,17 +680,18 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
 
 def _print_plan(config: Config, tracks, pending, skipped, video: str | None = None) -> None:
     if video:
-        fmt = "mp4 影片"
-        quality = " @ 最佳畫質" if video == "best" else f" @ 最高 {video}p"
+        fmt = t("fmt.video")
+        quality = t("fmt.best_video") if video == "best" else t("fmt.max_res", res=video)
     else:
-        fmt = config.audio_format if config.convert else "原始音訊"
+        fmt = config.audio_format if config.convert else t("fmt.raw")
         quality = "" if not config.convert else f" @ {config.quality}"
     print(
-        f"共 {len(tracks)} 首；待下載 {len(pending)} 首"
-        + (f"，略過 {len(skipped)} 首（已下載過）" if skipped else ""),
+        t("dl.plan", total=len(tracks), pending=len(pending))
+        + (t("dl.plan_skipped", n=len(skipped)) if skipped else ""),
         file=sys.stderr,
     )
-    print(f"輸出：{config.output_dir}　格式：{fmt}{quality}　並行：{config.concurrency}",
+    print(t("dl.output", dir=config.output_dir, fmt=f"{fmt}{quality}",
+             jobs=config.concurrency),
           file=sys.stderr)
 
 
@@ -698,9 +708,9 @@ def _summarize(results: list[Result], config: Config) -> int:
             pass
 
     print(
-        f"\n完成 {len(ok)} 首"
-        + (f"，失敗 {len(failed)} 首" if failed else "")
-        + f"　共 {human_size(total_bytes)}　→ {config.output_dir}",
+        "\n" + t("dl.done", n=len(ok))
+        + (t("dl.failed_count", n=len(failed)) if failed else "")
+        + t("dl.total_size", size=human_size(total_bytes), dir=config.output_dir),
         file=sys.stderr,
     )
     for result in warned:
@@ -1010,6 +1020,8 @@ def cmd_config_reset(args: argparse.Namespace) -> int:
 # --------------------------------------------------------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    # 語言在最前面就套用：不管跑的是 dl、doctor 還是 wechat，看到的訊息都該一致。
+    _apply_language()
     parser = build_parser()
     args = parser.parse_args(argv)
     if not getattr(args, "func", None):
@@ -1018,7 +1030,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         return args.func(args)
     except KeyboardInterrupt:
-        print("\n已中斷。", file=sys.stderr)
+        print(f"\n{t('interrupted')}", file=sys.stderr)
         return EXIT_INTERRUPTED
 
 
