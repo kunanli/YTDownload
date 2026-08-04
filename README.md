@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.18.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.19.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -82,6 +82,7 @@
 | `HTTP Error 403`、需要登入 | [要帶瀏覽器登入資訊](#http-error-403或需要登入) |
 | `HTTP Error 404`（`list=LM`） | [私人清單一定要登入](#我喜歡的音樂或私人清單下載不了) |
 | 雙擊 `.bat` 狂洗畫面 | [舊版問題，更新就好](#雙擊-下載bat-一直跳錯或狂洗畫面) |
+| `Python was not found` / Store 跳出來 | [那是 Windows 的假 python](#第一次雙擊會自動把東西裝好) |
 | 下載很慢、一直失敗 | [更新 yt-dlp](#下載很慢或一直失敗) |
 | 「沒有字幕可轉成歌詞」 | [那支影片沒字幕，正常現象](#歌詞與字幕) |
 | 想看完整錯誤訊息 | [指令後面加 `-v`](#我想看到底出了什麼事) |
@@ -106,9 +107,54 @@
 
 | 順序 | 它做什麼 | 缺了會怎樣 |
 | --- | --- | --- |
-| 1 | 找 Python | 找不到就告訴你 `winget install Python.Python.3.12`，不會直接關掉 |
+| 1 | 找一個**真的跑得起來**的 Python | 沒有就進入引導安裝（見下） |
 | 2 | 檢查 `ytmusic` 套件本身 | 沒裝就**自動** `pip install -e .`（第一次雙擊會看到這步） |
 | 3 | 開選單，選單再檢查 yt-dlp / mutagen / ffmpeg / curl_cffi | 缺了會列出來，並問要不要幫你裝 |
+
+#### 沒有 Python 的話：兩步就好
+
+```
+  ================================================
+     Setup - step 1 of 2:  install Python
+  ================================================
+
+  NOTE: Windows has a placeholder called "python" that is not a real
+  Python. That is why you may have seen:
+      "Python was not found; run without arguments to install from
+       the Microsoft Store"
+  Installing the real thing below fixes it.
+
+  I can install it for you now with winget.
+
+  Install Python 3.12 now? [Y/n] Y
+```
+
+裝完之後它會告訴你**第二步**：
+
+```
+  ================================================
+     Setup - step 2 of 2:  reopen this window
+  ================================================
+
+  Python is installed, but THIS window still does not know where it is.
+
+    1. Close this window.
+    2. Double-click the same file again.
+```
+
+> ### ⚠️ 「明明裝了 Python，它卻說找不到」
+>
+> Windows 內建一支**假的 `python`**（App Execution Alias）放在 PATH 裡。
+> 名字找得到，執行卻只會印一句
+> `Python was not found; run without arguments to install from the Microsoft Store`。
+>
+> 所以啟動檔**不是只檢查名字，而是真的跑一次**才算數。若你想徹底關掉那支假的：
+> 「設定 › 應用程式 › 進階應用程式設定 › 應用程式執行別名」，把兩個 `python` 都關掉。
+
+沒有 winget 的話會給你手動步驟，並特別提醒安裝程式第一頁那個最常被漏勾的
+**`Add python.exe to PATH`**。
+
+#### 相依套件缺了會怎樣
 
 第 3 步長這樣 —— **只有缺東西時才會出現**，都齊全的話直接進選單：
 
@@ -127,7 +173,7 @@
 - 答 `n` 就會印出手動步驟，不會硬裝
 - 裝完如果還說找不到，**把視窗關掉重開** —— 新裝的程式要重開才進得了 PATH
 
-Mac 的 `下載.command` 流程完全一樣。
+Mac 的 `下載.command` 流程完全一樣（改用 Homebrew）。
 
 ### 選單長什麼樣
 

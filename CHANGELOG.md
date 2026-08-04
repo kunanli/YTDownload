@@ -2,6 +2,38 @@
 
 版本號遵循 [語意化版本](https://semver.org/lang/zh-TW/)。
 
+## 1.19.0
+
+### 修正
+
+- **啟動檔被 Windows 的假 `python` 騙過去**。`where python` 會找到
+  `%LOCALAPPDATA%\Microsoft\WindowsApps\python.exe`——那是 App Execution Alias，
+  名字在 PATH 裡、執行卻只印
+  `Python was not found; run without arguments to install from the Microsoft Store`。
+
+  於是檢查「通過」了，下一步 `pip install -e .` 才莫名其妙失敗，畫面上只留一句
+  「Install failed」。使用者看到的是設定莫名其妙壞掉，而不是「你沒有 Python」。
+
+  現在**真的把每個候選跑一次**（`py -3` → `py` → `python` → `python3`，再加上
+  `%LOCALAPPDATA%\Programs\Python\Python3*`），並要求版本 ≥ 3.9。
+
+### 新增
+
+- **沒有 Python 時的引導安裝**，兩步：
+  1. 說明 Store 佔位程式是怎麼回事，然後問要不要用 winget 幫你裝
+  2. 明確告訴使用者「關掉視窗、再雙擊一次」——新裝的 Python 進不了已開視窗的 PATH
+- 沒有 winget 就給手動步驟，並特別提醒安裝程式第一頁最常被漏勾的
+  `Add python.exe to PATH`，以及怎麼關掉 App Execution Alias
+- 安裝失敗時建議 `ensurepip`，並提到公司網路的 proxy／SSL 可能是原因
+- macOS 的 `下載.command` 同樣改成「真的跑跑看」，並用 Homebrew 引導
+
+### 測試
+
+啟動檔完全在 Python 測試範圍之外——壞了不會有測試變紅，只有使用者會看到。
+新增 `tests/test_launchers.py` 把踩過的坑釘住：純 ASCII、換行格式、
+必須真的執行直譯器而不是只查名字、版本下限、兩步引導、以及
+`.gitattributes` 的 eol 設定。
+
 ## 1.18.0
 
 ### 新增

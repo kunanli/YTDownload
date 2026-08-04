@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.18.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.19.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.
@@ -88,6 +88,7 @@ Setup is a one-time job, about 10 minutes.
 | `[SSL: UNEXPECTED_EOF_WHILE_READING]` | [The connection is cut, not the video](#ssl-connection-cut) |
 | Only LinkedIn fails, other sites are fine | [Install curl_cffi to mimic a browser](#only-linkedin-fails-thats-probably-tls-fingerprinting) |
 | `curl: (35) TLS connect error … invalid library` | [Known curl_cffi bug on Windows](#short-urls-are-blocked) |
+| `Python was not found` / the Store opens | [That's Windows' fake python](#the-first-double-click-sets-everything-up) |
 | Pasting in the menu does nothing | [Ctrl+V in Windows Terminal, right-click in old PowerShell](#the-easy-way-double-click-the-launcher) |
 
 ---
@@ -100,9 +101,55 @@ Setup is a one-time job, about 10 minutes.
 
 | Step | What it does | If it's missing |
 | --- | --- | --- |
-| 1 | Look for Python | Tells you to run `winget install Python.Python.3.12`; it won't just close |
+| 1 | Find a Python that **actually runs** | Walks you through installing it (below) |
 | 2 | Check the `ytmusic` package | Runs `pip install -e .` **automatically** (you'll see this on the first run) |
 | 3 | Open the menu, which checks yt-dlp / mutagen / ffmpeg / curl_cffi | Lists what's missing and offers to install it |
+
+#### No Python? Two steps
+
+```
+  ================================================
+     Setup - step 1 of 2:  install Python
+  ================================================
+
+  NOTE: Windows has a placeholder called "python" that is not a real
+  Python. That is why you may have seen:
+      "Python was not found; run without arguments to install from
+       the Microsoft Store"
+  Installing the real thing below fixes it.
+
+  I can install it for you now with winget.
+
+  Install Python 3.12 now? [Y/n] Y
+```
+
+Then it tells you **step two**:
+
+```
+  ================================================
+     Setup - step 2 of 2:  reopen this window
+  ================================================
+
+  Python is installed, but THIS window still does not know where it is.
+
+    1. Close this window.
+    2. Double-click the same file again.
+```
+
+> ### ⚠️ "I have Python, but it says Python was not found"
+>
+> Windows ships a **fake `python`** (an App Execution Alias) that sits on your PATH.
+> The name resolves, but running it only prints
+> `Python was not found; run without arguments to install from the Microsoft Store`.
+>
+> That's why the launcher **runs the interpreter instead of just looking up the name**.
+> To disable the fake one for good: Settings › Apps › Advanced app settings ›
+> App execution aliases — switch off both `python` entries.
+
+Without winget you get manual steps, including a reminder about the checkbox
+everyone misses on the installer's first screen: **`Add python.exe to PATH`**.
+
+#### When dependencies are missing
 
 Step 3 looks like this — **it only appears when something is actually missing**:
 
@@ -121,7 +168,7 @@ Step 3 looks like this — **it only appears when something is actually missing*
 - Answer `n` and you get manual steps instead — nothing is forced
 - If it still says "not found" afterwards, **close the window and open it again**
 
-macOS users: `下載.command` behaves identically.
+macOS users: `下載.command` behaves identically, using Homebrew.
 
 ### The menu
 
