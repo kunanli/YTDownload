@@ -185,32 +185,32 @@ class TestRunMenu:
 
 class TestAskLanguages:
     def test_enter_means_use_default(self):
-        assert ask_languages(Asker(""), "字幕") == ""
+        assert ask_languages(Asker(""), "subs") == ""
 
     def test_single_choice(self):
-        assert ask_languages(Asker("1"), "字幕") == "繁中"
+        assert ask_languages(Asker("1"), "subs") == "繁中"
 
     def test_multiple_choices_keep_order(self):
-        assert ask_languages(Asker("3,1"), "字幕") == "英,繁中"
+        assert ask_languages(Asker("3,1"), "subs") == "英,繁中"
 
     def test_full_width_comma(self):
-        assert ask_languages(Asker("1，3"), "字幕") == "繁中,英"
+        assert ask_languages(Asker("1，3"), "subs") == "繁中,英"
 
     def test_all_six(self):
-        assert ask_languages(Asker("1,2,3,4,5,6"), "字幕") == "繁中,簡中,英,日,韓,西班牙"
+        assert ask_languages(Asker("1,2,3,4,5,6"), "subs") == "繁中,簡中,英,日,韓,西班牙"
 
     def test_deduplicates(self):
-        assert ask_languages(Asker("1,1,3"), "字幕") == "繁中,英"
+        assert ask_languages(Asker("1,1,3"), "subs") == "繁中,英"
 
     def test_invalid_tokens_ignored(self):
-        assert ask_languages(Asker("1,99,abc"), "字幕") == "繁中"
+        assert ask_languages(Asker("1,99,abc"), "subs") == "繁中"
 
     def test_all_invalid_falls_back_to_default(self):
-        assert ask_languages(Asker("99"), "字幕") == ""
+        assert ask_languages(Asker("99"), "subs") == ""
 
     def test_prompt_lists_every_language(self):
         asker = Asker("")
-        ask_languages(asker, "字幕")
+        ask_languages(asker, "subs")
         for _, name in LANGUAGE_CHOICES:
             assert name in asker.prompts[0]
 
@@ -322,3 +322,105 @@ class TestAskRequired:
         assert build_command("4", Asker("", "https://youtu.be/a", "", "")) == [
             "dl", "https://youtu.be/a", "--video", "720"
         ]
+
+
+class TestInterfaceLanguage:
+    """介面語言切換：選單、提示、字幕語言名稱都要跟著換。"""
+
+    @pytest.fixture(autouse=True)
+    def restore(self):
+        from ytmusic.i18n import language, set_language
+
+        before = language()
+        yield
+        set_language(before)
+
+    def test_menu_renders_in_each_language(self):
+        from ytmusic.i18n import LANGUAGE_CODES, set_language
+
+        expected = {"zh-Hant": "離開", "ja": "終了", "en": "Quit",
+                    "ko": "종료", "es": "Salir", "fi": "Poistu"}
+        for code in LANGUAGE_CODES:
+            set_language(code)
+            assert f"[0] {expected[code]}" in render_menu()
+
+    def test_language_option_is_always_findable(self):
+        # 看不懂目前語言的人得找得到出口，所以每個語言都留著 "Language"
+        from ytmusic.i18n import LANGUAGE_CODES, set_language
+
+        for code in LANGUAGE_CODES:
+            set_language(code)
+            assert "language" in render_menu().lower()
+
+    def test_prompts_follow_the_language(self):
+        from ytmusic.i18n import set_language
+
+        set_language("fi")
+        asker = Asker("https://youtu.be/a", "", "")
+        build_command("1", asker)
+        assert any("Liitä URL" in p for p in asker.prompts)
+
+    def test_subtitle_values_stay_chinese(self):
+        # 送進 --subs 的值是 lyrics.py 認得的中文別名，不能跟著介面語言變
+        from ytmusic.i18n import set_language
+
+        set_language("en")
+        assert ask_languages(Asker("1,3"), "subs") == "繁中,英"
+
+    def test_subtitle_names_are_translated_on_screen(self):
+        from ytmusic.i18n import set_language
+
+        set_language("ja")
+        asker = Asker("1")
+        ask_languages(asker, "subs")
+        assert "スペイン語" in asker.prompts[0]
+
+    def test_yes_answers_work_in_other_languages(self):
+        from ytmusic.menu import YES
+
+        assert {"kyllä", "예", "はい", "sí"} <= YES
+
+
+class TestChooseLanguage:
+    @pytest.fixture(autouse=True)
+    def restore(self):
+        from ytmusic.i18n import language, set_language
+
+        before = language()
+        yield
+        set_language(before)
+
+    def test_marks_the_current_language(self):
+        from ytmusic.i18n import set_language
+        from ytmusic.menu import render_language_menu
+
+        set_language("ko")
+        line = [l for l in render_language_menu().splitlines() if "한국어" in l][0]
+        assert "*" in line
+
+    def test_applies_and_saves(self, tmp_path, monkeypatch):
+        from ytmusic import config as config_mod
+        from ytmusic.i18n import language, set_language
+        from ytmusic.menu import choose_language
+
+        monkeypatch.setattr(config_mod.Config, "path",
+                            classmethod(lambda cls: tmp_path / "c.json"))
+        set_language("zh-Hant")
+        out = io.StringIO()
+        assert choose_language(Asker("6"), out) == "fi"
+        assert language() == "fi"
+        assert config_mod.Config.load(tmp_path / "c.json").ui_language == "fi"
+
+    def test_blank_keeps_current(self):
+        from ytmusic.i18n import set_language
+        from ytmusic.menu import choose_language
+
+        set_language("ja")
+        assert choose_language(Asker(""), io.StringIO()) == "ja"
+
+    def test_out_of_range_keeps_current(self):
+        from ytmusic.i18n import set_language
+        from ytmusic.menu import choose_language
+
+        set_language("ja")
+        assert choose_language(Asker("99"), io.StringIO()) == "ja"

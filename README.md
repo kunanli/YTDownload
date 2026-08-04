@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.16.0** ｜ [更新紀錄](CHANGELOG.md)
+**v1.17.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -27,6 +27,7 @@
 | Instagram（貼文、Reels、限動） | ✅ 需登入 |
 | LinkedIn（貼文影片、Learning） | ✅ 需登入 |
 | 微信視頻號 | ✅ [不用裝憑證、不用解密](#微信視頻號) |
+| 介面支援多國語言 | ✅ [中文 · 日本語 · English · 한국어 · Español · Suomi](#介面語言) |
 
 ---
 
@@ -67,6 +68,7 @@
 | 歌詞語言 | `python -m ytmusic config set subtitle_langs "繁中,英"` |
 | 同時下載幾首 | `python -m ytmusic config set concurrency 5` |
 | 短網址自動展開（不再詢問） | `python -m ytmusic config set expand_short_urls true` |
+| 介面語言 | `python -m ytmusic config set ui_language ja` |
 | 看目前設定 | `python -m ytmusic config show` |
 
 ### 出問題了？照畫面上的字找
@@ -148,11 +150,46 @@ Mac 的 `下載.command` 流程完全一樣。
     [7] 看下載過什麼
     [8] 追蹤一張新的播放清單
     [9] 檢查環境／連線（下載失敗時用）
+    [L] 切換語言 / Language
 
     [0] 離開
 
   請選擇（直接按 Enter = 1）：
 ```
+
+### 介面語言
+
+選單支援**六種語言**：中文（繁體）· 日本語 · English · 한국어 · Español · Suomi。
+
+在選單按 **`[L]`**：
+
+```
+   介面語言 / Interface language
+
+    [1]*中文（繁體）
+    [2] 日本語
+    [3] English
+    [4] 한국어
+    [5] Español
+    [6] Suomi
+
+  請選擇（直接按 Enter = 不變）：
+```
+
+`*` 是目前的語言。選好**立刻存起來**，下次打開就是那個語言，不用再選。
+`[L]` 這一列在每種語言下都帶著 "Language" 這個字 —— 就算現在的介面你完全看不懂，
+也找得到出口。
+
+第一次執行選單時會問一次，之後就不再問。也可以不透過選單直接設：
+
+```powershell
+python -m ytmusic config set ui_language ja     # zh-Hant, ja, en, ko, es, fi
+```
+
+> **翻譯到哪裡為止。** 雙擊啟動之後看到的所有文字（選單、提示、缺相依的詢問）
+> 都翻譯了。下載過程的進度與錯誤訊息目前還是中文 —— 它們用同一套機制，之後可以補上。
+> `下載.bat` 自己那三句訊息刻意維持英文：`cmd.exe` 會在 Python 啟動前就把非 ASCII
+> 文字弄壞。
 
 ### 選單怎麼決定平台
 

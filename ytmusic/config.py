@@ -46,6 +46,8 @@ class Config:
     # 短網址連不上時自動展開成完整網址。會把網址送給第三方服務，
     # 所以預設關閉——要嘛使用者當場同意，要嘛自己打開。
     expand_short_urls: bool = False
+    # 介面語言（i18n.LANGUAGE_CODES 之一）。空字串＝還沒選過，第一次執行會問。
+    ui_language: str = ""
     subtitle_langs: str = "zh-TW,zh-Hans,en,ja,ko,es"
     filename_template: str = DEFAULT_TEMPLATE
     cookies_file: str | None = None

@@ -15,6 +15,8 @@ import subprocess
 import sys
 from dataclasses import dataclass
 
+from .i18n import t
+
 
 @dataclass(frozen=True)
 class Dependency:
@@ -22,10 +24,14 @@ class Dependency:
 
     key: str
     label: str
-    why: str                       # 缺了會少掉什麼功能
+    why_key: str                   # 缺了會少掉什麼功能（i18n 代號）
     required: bool                 # 必要的才會在啟動時主動詢問
     command: list[str] | None      # None 代表沒辦法自動裝
     manual: str                    # 自動裝不了、或裝失敗時給的手動步驟
+
+    @property
+    def why(self) -> str:
+        return t(self.why_key)
 
 
 def pip_command(spec: str) -> list[str]:
@@ -69,27 +75,26 @@ def gaps(*, system: str | None = None, has: dict[str, bool] | None = None) -> li
         import yt_dlp  # noqa: F401
     except ImportError:
         missing.append(Dependency(
-            "yt-dlp", "yt-dlp", "沒有它就完全不能下載", True,
+            "yt-dlp", "yt-dlp", "dep.why.yt-dlp", True,
             pip_command("yt-dlp"), '  python -m pip install "yt-dlp"'))
 
     try:
         import mutagen  # noqa: F401
     except ImportError:
         missing.append(Dependency(
-            "mutagen", "mutagen", "寫不了歌名、歌手與專輯封面", True,
+            "mutagen", "mutagen", "dep.why.mutagen", True,
             pip_command("mutagen"), '  python -m pip install "mutagen"'))
 
     if not find_ffmpeg():
         missing.append(Dependency(
-            "ffmpeg", "ffmpeg", "轉不了 MP3，也合併不了影片的畫面與聲音", True,
+            "ffmpeg", "ffmpeg", "dep.why.ffmpeg", True,
             ffmpeg_command(system, has), FFMPEG_MANUAL))
 
     if not impersonation_status()[0]:
         from .downloader import CURL_CFFI_SPEC
 
         missing.append(Dependency(
-            "curl_cffi", "curl_cffi",
-            "部分站台（如 LinkedIn）會擋非瀏覽器的連線，裝了才連得上", False,
+            "curl_cffi", "curl_cffi", "dep.why.curl_cffi", False,
             pip_command(CURL_CFFI_SPEC),
             f'  python -m pip install "{CURL_CFFI_SPEC}"'))
 
@@ -100,9 +105,9 @@ def notice(missing: list[Dependency]) -> str:
     """開場提醒：缺什麼、會少掉什麼。沒缺就回空字串。"""
     if not missing:
         return ""
-    lines = ["", "  ── 缺少一些東西 ──", ""]
+    lines = ["", f"  {t('deps.header')}", ""]
     for dep in missing:
-        tag = "必要" if dep.required else "選用"
+        tag = t('deps.required') if dep.required else t('deps.optional')
         lines.append(f"  [{tag}] {dep.label}：{dep.why}")
     lines.append("")
     return "\n".join(lines)
@@ -110,11 +115,11 @@ def notice(missing: list[Dependency]) -> str:
 
 def run(command: list[str], *, out) -> bool:
     """執行安裝指令，把過程直接顯示給使用者看。"""
-    print(f"  執行：{' '.join(command)}", file=out, flush=True)
+    print(f"  {t('deps.running', command=' '.join(command))}", file=out, flush=True)
     try:
         return subprocess.run(command).returncode == 0
     except (OSError, subprocess.SubprocessError) as exc:
-        print(f"  失敗：{exc}", file=out)
+        print(f"  {t('deps.failed', error=exc)}", file=out)
         return False
 
 
@@ -125,7 +130,7 @@ def install_all(missing: list[Dependency], *, out) -> list[Dependency]:
         if dep.command is None:
             still.append(dep)
             continue
-        print(f"\n  安裝 {dep.label}…", file=out)
+        print(f"\n  {t('deps.installing', name=dep.label)}", file=out)
         if not run(dep.command, out=out):
             still.append(dep)
     return still
@@ -143,7 +148,7 @@ def offer(missing: list[Dependency], *, ask, out,
 
     wanted = [d for d in missing if d.required or include_optional]
     if not wanted:
-        print("  以上都是選用的，不裝也能正常下載。\n", file=out)
+        print(f"  {t('deps.optional_only')}\n", file=out)
         return missing
 
     if not assume_yes and not sys.stdin.isatty():
@@ -152,7 +157,7 @@ def offer(missing: list[Dependency], *, ask, out,
 
     if not assume_yes:
         try:
-            answer = ask("  要現在幫你裝嗎？ [Y/n] ").strip().lower()
+            answer = ask(f"  {t('deps.ask')}[Y/n] ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print(file=out)
             return missing
@@ -162,10 +167,10 @@ def offer(missing: list[Dependency], *, ask, out,
 
     still = install_all(wanted, out=out)
     if still:
-        print("\n  這些還是沒裝起來：", file=out)
+        print(f"\n  {t('deps.still_missing')}", file=out)
         _print_manual(still, out=out)
     else:
-        print("\n  裝好了。如果還是說找不到，把視窗關掉重開一次。\n", file=out)
+        print(f"\n  {t('deps.done')}\n", file=out)
     return still + [d for d in missing if d not in wanted]
 
 

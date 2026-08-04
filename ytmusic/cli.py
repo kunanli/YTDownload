@@ -75,8 +75,10 @@ def _add_menu_parser(sub) -> None:
 
 
 def cmd_menu(args: argparse.Namespace) -> int:
+    from .i18n import set_language
     from .menu import run_menu
 
+    set_language(Config.load().ui_language)
     return run_menu()
 
 
