@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.22.2** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.23.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -1187,6 +1187,24 @@ python -m ytmusic doctor "https://www.youtube.com/watch?v=任一支影片"
 
 Windows 上如果用的是 Chrome／Edge，訊息會是 `cookies could not be decrypted`，那是另一回事
 （127 版起的應用程式綁定加密），關再多次也沒用 —— 改用 Firefox 或 cookies.txt。
+
+> ### ⚠️ 「第一次成功，第二次就不行了」
+>
+> 這是 1.23.0 之前的毛病，症狀完全不會讓人想到原因。
+>
+> yt-dlp 只要收到 cookies 檔，結束時就會**把整個 cookie jar 寫回那個檔案**。YouTube
+> 每次工作階段都會輪替 session，所以跑一次就把你匯出來的檔案覆蓋成「只對那一次有效」
+> 的版本——第二次再跑，讀到的已經是屍體。
+>
+> 實測：一行的 cookies.txt 跑一次之後變成六行。最清楚的畫面是 `doctor` 的三個探針，
+> 前兩個 ✔、第三個就 ✖ 了，cookies 在同一次指令裡就壞掉。
+>
+> **1.23.0 起每次都給 yt-dlp 一份用完即丟的副本，原檔永遠不動。** 如果你還在舊版，
+> 又不方便更新，就自己留一份母本、每次跑之前覆蓋回去：
+>
+> ```powershell
+> Copy-Item C:\Users\你\cookies-master.txt C:\Users\你\cookies.txt -Force
+> ```
 
 ### 第一種：非 cookies 不可
 

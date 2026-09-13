@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import itertools
 import re
+import tempfile
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -109,6 +111,9 @@ class Downloader:
         self._blocked_hits = 0
         self._succeeded = 0
         self._blocked_lock = threading.Lock()
+        # yt-dlp 會改寫 cookies 檔，所以每次都給它一份丟得掉的副本。
+        self._cookie_dir: tempfile.TemporaryDirectory | None = None
+        self._cookie_seq = itertools.count()
 
     # -- 前置檢查 ---------------------------------------------------------
 
@@ -126,6 +131,36 @@ class Downloader:
 
     def cancel(self) -> None:
         self._stop.set()
+
+    def _disposable_cookies(self) -> str | None:
+        """把使用者的 cookies 檔複製一份給 yt-dlp 用，原檔永遠不動。
+
+        yt-dlp 只要收到 ``cookiefile`` 就會在結束時把整個 cookie jar 寫回那個檔
+        （``YoutubeDL.save_cookies``）。YouTube 每次工作階段都會輪替 session
+        cookie，於是「跑一次就把使用者的檔案改掉」——而且改成只對那一次有效的版本。
+
+        症狀極難聯想到原因：**第一次成功，之後每一次都被當成沒登入**。實際踩到的
+        畫面是 doctor 的三個探針——前兩個 ✔，第三個就已經 ✖ 了，cookies 在同一次
+        doctor 裡就被寫壞了。使用者會以為是自己 cookies 匯錯，於是重匯、再壞、再重匯。
+
+        每次呼叫都從原檔重新複製：同一次執行裡的每個 YoutubeDL 都拿到一份乾淨的
+        起點，彼此不會互相汙染。
+        """
+        import shutil
+
+        if not self.config.cookies_file:
+            return None
+        source = Path(self.config.cookies_file).expanduser()
+        if self._cookie_dir is None:
+            self._cookie_dir = tempfile.TemporaryDirectory(prefix="ytmusic-cookies")
+        copy = Path(self._cookie_dir.name) / f"{next(self._cookie_seq)}.txt"
+        try:
+            shutil.copyfile(source, copy)
+        except OSError:
+            # 複製不動就照原樣交出去——讓 yt-dlp 自己去報「找不到 cookies」那類錯誤，
+            # 總比在這裡把整批下載擋掉好。
+            return str(source)
+        return str(copy)
 
     def _note_success(self) -> None:
         """記一次成功。只要有一首下得動，就證明這不是「整個被擋」。"""
@@ -508,8 +543,9 @@ class Downloader:
             opts["proxy"] = self.config.proxy
         if self.impersonate:
             opts["impersonate"] = impersonate_target(self.impersonate)
-        if self.config.cookies_file:
-            opts["cookiefile"] = str(Path(self.config.cookies_file).expanduser())
+        cookies = self._disposable_cookies()
+        if cookies:
+            opts["cookiefile"] = cookies
         if self.config.cookies_from_browser:
             opts["cookiesfrombrowser"] = parse_browser_spec(self.config.cookies_from_browser)
         if self.config.rate_limit:
