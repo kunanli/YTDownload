@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.24.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.25.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -1206,6 +1206,30 @@ Windows 上如果用的是 Chrome／Edge，訊息會是 `cookies could not be de
 > Copy-Item C:\Users\你\cookies-master.txt C:\Users\你\cookies.txt -Force
 > ```
 
+### 第一種其實還有一招：`--alt` 換個上傳版本
+
+鎖登入的通常是**唱片公司的官方帳號**那一版，同一首歌其他人上傳的往往沒鎖。
+
+```powershell
+python -m ytmusic dl "清單網址" --playlist --alt
+```
+
+下載失敗時，它會用歌名去搜尋，找到同一首歌的其他上傳版本就改抓那個，並在結尾註明：
+
+```
+✔ 微笑みの爆弾（改用其他上傳版本：馬渡松子 - 微笑みの爆弾）
+```
+
+標籤和檔名仍用原本的歌名，不會跟著上傳者跑。
+
+判斷「是不是同一首」寧可漏掉也不抓錯 —— 下載到同名的翻唱、演唱會版或三小時合輯，
+比「這首沒下到」更糟，因為你不會發現，直到播放清單裡冒出一段四十分鐘的東西。
+
+⚠️ 這招只在**整張清單**下載時有效。單獨貼一個網址的話，失敗發生在解析階段，
+那時還不知道歌名，無從搜起。
+
+> 用選單的話它會直接問你要不要開。
+
 ### 第一種：非 cookies 不可
 
 1. 帶上已登入的 cookies：`--cookies-from-browser firefox`
@@ -1423,6 +1447,7 @@ pip install -e .
 | `--playlist-folder` | 用清單名稱建資料夾，檔名加上曲序 |
 | `--max N` | 每個網址最多下載幾首（`0` 表示不設限；自動混音清單預設 50） |
 | `--slow` | 慢慢下載：等同 `-j 1 --sleep 2`，被當成機器人時用這個 |
+| `--alt` | 鎖登入的歌，自動改抓別人上傳的同一首 |
 | `--sleep 秒` | 每次向站台要東西之間停幾秒 |
 | `--force` | 忽略下載歷史，重新下載 |
 | `--dry-run` | 只列出會下載什麼，不真的下載 |

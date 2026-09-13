@@ -1,10 +1,11 @@
+import pytest
 from pathlib import Path
 
 from ytmusic.config import Config
 from ytmusic.downloader import (
     Downloader, Track, _CollectingLogger, _clean_error_text, _fallback_url,
     _final_path, _parse_rate, _rename_from_meta, _short_error, _unique_path,
-    _walk, _is_network_error, _extract_over_ipv4, NETWORK_HINT,
+    Result, _walk, _is_network_error, _extract_over_ipv4, NETWORK_HINT,
     CURL_CFFI_SPEC, IMPERSONATE_HINT, RADIO_DEFAULT_MAX, BLOCKED_ABORT_AFTER,
     is_blocked_error, is_cookie_error,
 )
@@ -846,3 +847,87 @@ class TestCookieFileIsNeverModified:
         # 複製不動時寧可讓 yt-dlp 自己報錯，也不要在這裡把整批下載擋掉
         config = Config(output_dir=tmp_path, cookies_file=str(tmp_path / "missing.txt"))
         assert Downloader(config)._base_opts()["cookiefile"].endswith("missing.txt")
+
+
+class TestAlternativeUploads:
+    """鎖登入的通常是官方帳號那版；別人上傳的同一首往往沒鎖。"""
+
+    def _downloader(self, tmp_path, **kwargs):
+        return Downloader(Config(output_dir=tmp_path), **kwargs)
+
+    def _track(self):
+        return Track("orig", "https://y/orig", "JUST COMMUNICATION")
+
+    def _hit(self, video_id, title):
+        from ytmusic.search import SearchResult
+
+        return SearchResult(video_id=video_id, url=f"https://y/{video_id}",
+                            title=title, uploader="x", duration=200)
+
+    def test_off_by_default(self, tmp_path):
+        assert not self._downloader(tmp_path).find_alternatives
+
+    def test_swaps_in_a_matching_upload(self, tmp_path, monkeypatch):
+        downloader = self._downloader(tmp_path, find_alternatives=True)
+        monkeypatch.setattr(downloader, "search",
+                            lambda q, limit=5: [self._hit("other", "TWO-MIX - JUST COMMUNICATION")])
+        attempted = []
+
+        def fake_download(track, *, allow_alternative=True):
+            attempted.append(track.video_id)
+            return Result(track, "ok", message=track.title)
+
+        monkeypatch.setattr(downloader, "_download_one", fake_download)
+        result = downloader._try_alternative(self._track())
+        assert result is not None and result.status == "ok"
+        assert attempted == ["other"]
+
+    def test_keeps_the_original_title_so_tags_do_not_follow_the_uploader(self, tmp_path, monkeypatch):
+        downloader = self._downloader(tmp_path, find_alternatives=True)
+        monkeypatch.setattr(downloader, "search",
+                            lambda q, limit=5: [self._hit("other", "TWO-MIX - JUST COMMUNICATION")])
+        seen = {}
+
+        def fake_download(track, *, allow_alternative=True):
+            seen["title"] = track.title
+            return Result(track, "ok")
+
+        monkeypatch.setattr(downloader, "_download_one", fake_download)
+        downloader._try_alternative(self._track())
+        assert seen["title"] == "JUST COMMUNICATION"
+
+    def test_a_different_song_is_never_substituted(self, tmp_path, monkeypatch):
+        downloader = self._downloader(tmp_path, find_alternatives=True)
+        monkeypatch.setattr(downloader, "search",
+                            lambda q, limit=5: [self._hit("other", "まったく別の曲です")])
+        monkeypatch.setattr(downloader, "_download_one",
+                            lambda *a, **k: pytest.fail("不該下載不同的歌"))
+        assert downloader._try_alternative(self._track()) is None
+
+    def test_the_same_video_is_not_retried(self, tmp_path, monkeypatch):
+        downloader = self._downloader(tmp_path, find_alternatives=True)
+        monkeypatch.setattr(downloader, "search",
+                            lambda q, limit=5: [self._hit("orig", "JUST COMMUNICATION")])
+        monkeypatch.setattr(downloader, "_download_one",
+                            lambda *a, **k: pytest.fail("不該重試同一支影片"))
+        assert downloader._try_alternative(self._track()) is None
+
+    def test_a_failing_search_is_not_a_new_error(self, tmp_path, monkeypatch):
+        # 這是加分項，不該把「這首下不到」變成別的失敗原因
+        downloader = self._downloader(tmp_path, find_alternatives=True)
+
+        def boom(*a, **k):
+            raise RuntimeError("搜尋掛了")
+
+        monkeypatch.setattr(downloader, "search", boom)
+        assert downloader._try_alternative(self._track()) is None
+
+    def test_the_substitute_is_reported_not_silent(self, tmp_path, monkeypatch):
+        # 換了版本卻不說，使用者會以為拿到的是原本那個上傳
+        downloader = self._downloader(tmp_path, find_alternatives=True)
+        monkeypatch.setattr(downloader, "search",
+                            lambda q, limit=5: [self._hit("other", "TWO-MIX - JUST COMMUNICATION")])
+        monkeypatch.setattr(downloader, "_download_one",
+                            lambda track, **k: Result(track, "ok"))
+        result = downloader._try_alternative(self._track())
+        assert any("TWO-MIX" in w for w in result.warnings)

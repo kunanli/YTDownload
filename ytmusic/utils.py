@@ -256,6 +256,41 @@ def youtube_login_cookies(path) -> tuple[bool, list[str]]:
     return not missing, missing
 
 
+# 上傳者常在標題前後塞自己的名字、頻道名、畫質標記，所以比對前要先刮掉一層。
+_TITLE_NOISE = re.compile(
+    r"""(?ix)
+    \[[^\]]*\]                      # [Official] [HD] [4K] …
+    | \([^)]*(?:official|mv|music\s*video|full|hd|4k|audio|lyrics?|字幕|完整)[^)]*\)
+    | 【[^】]*】
+    | (?:official\s*)?(?:music\s*)?video
+    | full\s*version | full
+    | mv | hd | 4k | remastered
+    """,
+)
+
+
+def _title_tokens(title: str) -> set[str]:
+    """把標題壓成可比對的詞集合。"""
+    cleaned = _TITLE_NOISE.sub(" ", title or "")
+    cleaned = re.sub(r"[^\w\u3040-\u30ff\u4e00-\u9fff]+", " ", cleaned.lower())
+    return {tok for tok in cleaned.split() if len(tok) > 1 or not tok.isascii()}
+
+
+def same_song(wanted: str, candidate: str) -> bool:
+    """判斷搜尋結果是不是同一首歌。
+
+    寧可漏掉也不要抓錯：下載到同名的翻唱、演唱會版或整張專輯，比「這首沒下到」
+    更糟——使用者不會發現，直到播放清單裡冒出一段四十分鐘的東西。所以要求原標題
+    的詞有大半都出現在候選標題裡，而不是只看相似度。
+    """
+    want = _title_tokens(wanted)
+    if not want:
+        return False
+    got = _title_tokens(candidate)
+    overlap = len(want & got)
+    return overlap >= max(1, round(len(want) * 0.6))
+
+
 def classify_url(url: str) -> str:
     """判斷網址指向單曲、播放清單，還是兩者皆有。
 
