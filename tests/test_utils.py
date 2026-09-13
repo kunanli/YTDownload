@@ -401,3 +401,50 @@ class TestSameSong:
 
     def test_empty_title_never_matches(self):
         self._no("", "隨便什麼")
+
+
+class TestSameSongRejectsWrongVersions:
+    """全部取自 1.25.0 實際換錯的案例——使用者的畫面就是這些測試的來源。"""
+
+    def _no(self, wanted, candidate, why):
+        from ytmusic.utils import same_song
+
+        assert not same_song(wanted, candidate), f"{why}：{candidate!r} 不該被當成 {wanted!r}"
+
+    def _yes(self, wanted, candidate, why):
+        from ytmusic.utils import same_song
+
+        assert same_song(wanted, candidate), f"{why}：{candidate!r} 應該對上 {wanted!r}"
+
+    def test_a_short_english_title_does_not_match_a_long_foreign_one(self):
+        # 真的下載到了一首越南流行歌，只因為標題裡有 WILL 這個字
+        self._no("WILL",
+                 "NƠI TA CHỜ EM (OFFICIAL MV 4K) | WILL FT KAITY | 1ST SINGLE - EM CHƯA 18 OST",
+                 "單字歌名撞進長標題")
+
+    def test_a_live_recording_is_not_the_studio_track(self):
+        self._no("ライオン",
+                 "Live 『ライオン LION』May'n/中島愛 at 日本武道館 2010.12.22",
+                 "演唱會版")
+
+    def test_the_first_take_is_a_different_arrangement(self):
+        self._no("Do As Infinity / Fukai Mori（Deep into the Forest）",
+                 "Do As Infinity - Fukai Mori / THE FIRST TAKE", "重新編曲")
+
+    def test_a_medley_is_not_a_song(self):
+        self._no("Every Heart", "90年代アニソンメドレー 3時間耐久 作業用BGM", "三小時合輯")
+
+    def test_a_band_name_containing_mix_is_not_a_remix(self):
+        # TWO-MIX 是團名。把 mix 當成「混音版」的記號會誤殺正確的結果
+        self._yes("JUST COMMUNICATION", "TWO-MIX - JUST COMMUNICATION", "團名含 MIX")
+
+    def test_a_one_character_title_still_matches_a_similar_length_one(self):
+        # 中日文整句常只算一個詞，所以短標題的判斷要看字數不是詞數
+        self._yes("小松未歩 - 謎", "【名探偵コナン】謎", "單字歌名但長度相當")
+
+    def test_an_artist_suffix_is_still_the_same_song(self):
+        self._yes("魂のルフラン", "魂のルフラン - 高橋洋子（フル）", "加上歌手")
+
+    def test_a_live_original_may_match_a_live_candidate(self):
+        # 原曲自己就是演唱會版時，就不該再用這個理由排除
+        self._yes("ライオン Live at 武道館", "『ライオン』Live 武道館 2010", "兩邊都是 live")

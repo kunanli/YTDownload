@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.25.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.25.1** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -1224,6 +1224,10 @@ python -m ytmusic dl "清單網址" --playlist --alt
 
 判斷「是不是同一首」寧可漏掉也不抓錯 —— 下載到同名的翻唱、演唱會版或三小時合輯，
 比「這首沒下到」更糟，因為你不會發現，直到播放清單裡冒出一段四十分鐘的東西。
+
+具體會擋掉：**演唱會版、THE FIRST TAKE、翻唱、演奏版、合輯**（原曲自己就是那種的話
+就不擋），以及**歌名很短時撞進長標題**的情況 —— 曾經有一首叫 `WILL` 的歌被換成
+`NƠI TA CHỜ EM ... | WILL FT KAITY`，一首越南流行歌。
 
 ⚠️ 這招只在**整張清單**下載時有效。單獨貼一個網址的話，失敗發生在解析階段，
 那時還不知道歌名，無從搜起。

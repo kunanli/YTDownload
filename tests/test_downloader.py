@@ -873,7 +873,7 @@ class TestAlternativeUploads:
                             lambda q, limit=5: [self._hit("other", "TWO-MIX - JUST COMMUNICATION")])
         attempted = []
 
-        def fake_download(track, *, allow_alternative=True):
+        def fake_download(track, **kwargs):
             attempted.append(track.video_id)
             return Result(track, "ok", message=track.title)
 
@@ -888,7 +888,7 @@ class TestAlternativeUploads:
                             lambda q, limit=5: [self._hit("other", "TWO-MIX - JUST COMMUNICATION")])
         seen = {}
 
-        def fake_download(track, *, allow_alternative=True):
+        def fake_download(track, **kwargs):
             seen["title"] = track.title
             return Result(track, "ok")
 
@@ -931,3 +931,44 @@ class TestAlternativeUploads:
                             lambda track, **k: Result(track, "ok"))
         result = downloader._try_alternative(self._track())
         assert any("TWO-MIX" in w for w in result.warnings)
+
+
+class TestAlternativesDoNotDisturbTheProgressLine:
+    """替代版本是同一首歌的另一次嘗試，不是新的一首。"""
+
+    def test_inner_attempts_do_not_start_a_new_entry(self, tmp_path, monkeypatch):
+        # 少了這個開關，每試一個版本就多跳一個編號，最後印出 [29/24] 這種東西
+        from ytmusic.search import SearchResult
+
+        started = []
+
+        class Reporter:
+            def start(self, video_id, label):
+                started.append(video_id)
+
+            def finish(self, *a, **k):
+                pass
+
+            def update(self, *a, **k):
+                pass
+
+            def log(self, *a, **k):
+                pass
+
+        downloader = Downloader(Config(output_dir=tmp_path, use_history=False),
+                                reporter=Reporter(), find_alternatives=True)
+        monkeypatch.setattr(downloader, "search", lambda q, limit=5: [
+            SearchResult(video_id="other", url="https://y/other",
+                         title="TWO-MIX - JUST COMMUNICATION", uploader="x", duration=200)])
+        monkeypatch.setattr(downloader, "_fetch_for_test", None, raising=False)
+
+        real = Downloader._download_one
+
+        def only_the_swap_succeeds(self, track, **kwargs):
+            if track.video_id == "other":
+                return Result(track, "ok", message=track.title)
+            return real(self, track, **kwargs)
+
+        monkeypatch.setattr(Downloader, "_download_one", only_the_swap_succeeds)
+        downloader._try_alternative(Track("orig", "https://y/orig", "JUST COMMUNICATION"))
+        assert started == []  # 內層不該再開一個進度項目
