@@ -231,7 +231,7 @@ def _add_doctor_parser(sub) -> None:
 def cmd_doctor(args: argparse.Namespace) -> int:
     from .doctor import conclusion, environment, missing_advice, probe_url
 
-    checks = environment()
+    checks = environment(Config.load())
     print(t("doctor.env"), file=sys.stderr)
     for check in checks:
         print(check.line(), file=sys.stderr)
@@ -761,6 +761,10 @@ def _summarize(results: list[Result], config: Config, *,
     # 不同——混成同一句話，使用者只會照著錯的那半邊試。
     if _cookies_unreadable(failed):
         print("\n" + t("cookies.unreadable"), file=sys.stderr)
+    elif (blocked or _is_blocked(failed)) and _cookies_without_login(config):
+        # YouTube 對「cookies 沒登入」回的訊息跟「你是機器人」一模一樣。不點破的話，
+        # 使用者會照著那句話去換 IP、調速度、等退燒——真正的原因一個都沒碰到。
+        print("\n" + t("cookies.no_login_hint"), file=sys.stderr)
     elif blocked or _is_blocked(failed):
         # 順序有意義：缺 JS runtime 會裝成「被擋」的樣子（403），而它是自己這台
         # 機器就能補好的；先叫人去弄 cookies，等於把最好修的那個原因藏在後面。
@@ -944,6 +948,15 @@ def cmd_sync_run(args: argparse.Namespace) -> int:
 _COOKIE_HINT_MARKERS = (
     "403", "sign in", "not a bot", "drm", "age", "private video", "members-only",
 )
+
+
+def _cookies_without_login(config: Config) -> bool:
+    """設了 cookies 檔，但裡面根本沒有 YouTube 的登入憑證。"""
+    from .utils import youtube_login_cookies
+
+    if not config.cookies_file:
+        return False
+    return not youtube_login_cookies(config.cookies_file)[0]
 
 
 def _cookies_unreadable(failed: list[Result]) -> bool:

@@ -1083,6 +1083,78 @@ MESSAGES.update({
         "fi": "Vain täysi URL toimi – estetty on lyhytosoitteen verkkotunnus itse, ei sivusto.\n"
               "  Lisää --expand lataukseen, niin vaihto tapahtuu automaattisesti.",
     },
+    "cookies.logged_in": {
+        "zh-Hant": "有 YouTube 的登入憑證", "ja": "YouTube のログイン情報あり",
+        "en": "carries a YouTube login", "ko": "YouTube 로그인 정보 있음",
+        "es": "contiene un inicio de sesión de YouTube", "fi": "sisältää YouTube-kirjautumisen",
+    },
+    "cookies.no_login": {
+        "zh-Hant": "裡面沒有 YouTube 的登入憑證（缺 {names}）→ 要在無痕視窗登入後再匯出",
+        "ja": "YouTube のログイン情報がありません（{names} が不足）→ シークレットウィンドウでログインしてから書き出してください",
+        "en": "no YouTube login inside (missing {names}) → sign in from a private window, then export",
+        "ko": "YouTube 로그인 정보가 없습니다({names} 없음) → 시크릿 창에서 로그인한 뒤 내보내세요",
+        "es": "no contiene un inicio de sesión de YouTube (falta {names}) → inicia sesión en una ventana privada y luego exporta",
+        "fi": "ei sisällä YouTube-kirjautumista (puuttuu {names}) → kirjaudu yksityisessä ikkunassa ja vie sitten",
+    },
+    "cookies.no_login_hint": {
+        "zh-Hant": """  你的 cookies 檔案裡**沒有 YouTube 的登入憑證**——所以那句「not a bot」不是在說你打太快，
+  是在說「你沒登入」。YouTube 對這兩件事回的是同一句話，這正是它難查的原因。
+
+  yt-dlp 要看到 LOGIN_INFO，而且 SAPISID／__Secure-1PAPISID／__Secure-3PAPISID 至少一個，
+  才算數。匯出時漏掉最常見的兩個原因：
+    1. 匯出當下那個分頁不是在 youtube.com（擴充功能只給當前網域的 cookies）
+    2. 匯出前就按了登出，或用了沒登入的無痕視窗
+
+  重匯一次：無痕視窗登入 → 另開分頁去 youtube.com/robots.txt → 在**那一頁**匯出 → 關掉視窗。""",
+        "ja": """  cookies ファイルに **YouTube のログイン情報がありません**——つまり「not a bot」は速度の話ではなく、
+  「ログインしていない」という意味です。YouTube は両方に同じ文言を返すので分かりにくいのです。
+
+  yt-dlp は LOGIN_INFO と、SAPISID／__Secure-1PAPISID／__Secure-3PAPISID のいずれかが必要です。
+  書き出しで漏れる原因の上位 2 つ：
+    1. 書き出した時のタブが youtube.com ではなかった（拡張機能は現在のドメインの cookies しか出しません）
+    2. 書き出す前にログアウトした、またはログインしていないシークレットウィンドウだった
+
+  やり直し：シークレットでログイン → 別タブで youtube.com/robots.txt → **そのページで**書き出し → 閉じる。""",
+        "en": """  Your cookies file has **no YouTube login in it** — so that "not a bot" message isn't about speed,
+  it means "you are not signed in". YouTube returns the same sentence for both, which is what makes
+  this so hard to diagnose.
+
+  yt-dlp needs LOGIN_INFO plus one of SAPISID / __Secure-1PAPISID / __Secure-3PAPISID.
+  The two usual ways an export misses them:
+    1. The tab wasn't on youtube.com when you exported (the extension only gives the current domain)
+    2. You signed out before exporting, or used a private window that was never signed in
+
+  Redo it: sign in privately → new tab to youtube.com/robots.txt → export **on that page** → close it.""",
+        "ko": """  cookies 파일에 **YouTube 로그인 정보가 없습니다** — 즉 "not a bot"은 속도 얘기가 아니라
+  "로그인하지 않았다"는 뜻입니다. YouTube가 두 경우에 같은 문장을 돌려주기 때문에 찾기 어렵습니다.
+
+  yt-dlp는 LOGIN_INFO와 SAPISID / __Secure-1PAPISID / __Secure-3PAPISID 중 하나가 필요합니다.
+  내보낼 때 빠지는 흔한 두 가지 이유:
+    1. 내보낸 탭이 youtube.com이 아니었음(확장 프로그램은 현재 도메인의 cookies만 줍니다)
+    2. 내보내기 전에 로그아웃했거나, 로그인하지 않은 시크릿 창이었음
+
+  다시 하세요: 시크릿에서 로그인 → 새 탭에서 youtube.com/robots.txt → **그 페이지에서** 내보내기 → 닫기.""",
+        "es": """  Tu archivo de cookies **no contiene un inicio de sesión de YouTube**, así que ese "not a bot" no
+  habla de velocidad: significa "no has iniciado sesión". YouTube devuelve la misma frase para ambos
+  casos, y por eso cuesta tanto diagnosticarlo.
+
+  yt-dlp necesita LOGIN_INFO y uno de SAPISID / __Secure-1PAPISID / __Secure-3PAPISID.
+  Las dos formas habituales de perderlos al exportar:
+    1. La pestaña no estaba en youtube.com al exportar (la extensión solo da el dominio actual)
+    2. Cerraste sesión antes de exportar, o usaste una ventana privada sin iniciar sesión
+
+  Repítelo: inicia sesión en privado → pestaña nueva a youtube.com/robots.txt → exporta **ahí** → cierra.""",
+        "fi": """  Evästetiedostossasi **ei ole YouTube-kirjautumista** – eli tuo "not a bot" ei puhu nopeudesta vaan
+  tarkoittaa "et ole kirjautunut". YouTube palauttaa saman lauseen molemmissa tapauksissa, mistä
+  vian vaikeus johtuu.
+
+  yt-dlp tarvitsee LOGIN_INFO:n ja yhden näistä: SAPISID / __Secure-1PAPISID / __Secure-3PAPISID.
+  Kaksi tavallisinta tapaa hukata ne vietäessä:
+    1. Välilehti ei ollut youtube.comissa vietäessä (laajennus antaa vain nykyisen verkkotunnuksen)
+    2. Kirjauduit ulos ennen vientiä, tai käytit yksityistä ikkunaa johon ei kirjauduttu
+
+  Tee uudelleen: kirjaudu yksityisesti → uusi välilehti youtube.com/robots.txt → vie **siltä sivulta** → sulje.""",
+    },
     "cookies.unreadable": {
         "zh-Hant": "讀不到瀏覽器的 cookies——這是本機的問題，連線一個封包都還沒送出去，"
                    "查網路或防毒是白花力氣。最常見的原因是那個瀏覽器還在跑（關掉視窗還會留背景程序，"

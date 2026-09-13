@@ -310,3 +310,56 @@ class TestFindJsRuntimes:
 
         monkeypatch.setattr("shutil.which", lambda name: None)
         assert find_js_runtimes() == {}
+
+
+class TestYoutubeLoginCookies:
+    """YouTube 對「cookies 沒登入」回的訊息跟「你是機器人」一模一樣，所以要自己驗。"""
+
+    def _write(self, tmp_path, *names):
+        path = tmp_path / "cookies.txt"
+        lines = ["# Netscape HTTP Cookie File"]
+        for name in names:
+            lines.append(f".youtube.com\tTRUE\t/\tTRUE\t9999999999\t{name}\tvalue")
+        path.write_text("\n".join(lines) + "\n")
+        return path
+
+    def test_a_real_login_export(self, tmp_path):
+        from ytmusic.utils import youtube_login_cookies
+
+        path = self._write(tmp_path, "LOGIN_INFO", "SAPISID", "PREF", "VISITOR_INFO1_LIVE")
+        assert youtube_login_cookies(path) == (True, [])
+
+    def test_secure_3papisid_counts_instead_of_sapisid(self, tmp_path):
+        from ytmusic.utils import youtube_login_cookies
+
+        path = self._write(tmp_path, "LOGIN_INFO", "__Secure-3PAPISID")
+        assert youtube_login_cookies(path)[0]
+
+    def test_not_logged_in_export(self, tmp_path):
+        # 沒登入的無痕視窗匯出來的，長這樣：有 cookies，但沒有登入憑證
+        from ytmusic.utils import youtube_login_cookies
+
+        path = self._write(tmp_path, "PREF", "VISITOR_INFO1_LIVE", "YSC")
+        logged_in, missing = youtube_login_cookies(path)
+        assert not logged_in
+        assert "LOGIN_INFO" in missing
+
+    def test_login_info_alone_is_not_enough(self, tmp_path):
+        from ytmusic.utils import youtube_login_cookies
+
+        assert not youtube_login_cookies(self._write(tmp_path, "LOGIN_INFO"))[0]
+
+    def test_cookies_for_another_site_do_not_count(self, tmp_path):
+        # 匯出時分頁不在 youtube.com——最常見的匯錯方式
+        from ytmusic.utils import youtube_login_cookies
+
+        path = tmp_path / "cookies.txt"
+        path.write_text(".google.com\tTRUE\t/\tTRUE\t9999999999\tLOGIN_INFO\tv\n"
+                        ".google.com\tTRUE\t/\tTRUE\t9999999999\tSAPISID\tv\n")
+        assert not youtube_login_cookies(path)[0]
+
+    def test_an_unreadable_file_is_not_reported_as_a_problem(self, tmp_path):
+        # 這只是輔助檢查，不該擋下本來可能成功的下載
+        from ytmusic.utils import youtube_login_cookies
+
+        assert youtube_login_cookies(tmp_path / "nope.txt") == (True, [])

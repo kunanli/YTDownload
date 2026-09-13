@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pathlib
 import re
 import shutil
 import unicodedata
@@ -216,6 +217,43 @@ _YOUTUBE_HOSTS = {
     "youtube.com", "www.youtube.com", "m.youtube.com",
     "music.youtube.com", "youtu.be", "www.youtu.be",
 }
+
+
+# yt-dlp 認定「這份 cookies 是登入狀態」的條件：要有 LOGIN_INFO，而且 SAPISID
+# 三兄弟至少有一個（見 yt_dlp/extractor/youtube/_base.py 的 _has_auth_cookies）。
+# 少了任何一邊，YouTube 一律回「Sign in to confirm you're not a bot」——那句話完全
+# 看不出是「你的 cookies 沒有登入」，使用者只會以為自己被當成機器人，然後跑去換 IP、
+# 調速度、等退燒，全都白費。所以要在送出去之前就自己驗一遍。
+_YT_LOGIN_COOKIE = "LOGIN_INFO"
+_YT_SID_COOKIES = ("SAPISID", "__Secure-1PAPISID", "__Secure-3PAPISID")
+
+
+def youtube_login_cookies(path) -> tuple[bool, list[str]]:
+    """檢查 cookies.txt 裡有沒有 YouTube 的登入憑證。
+
+    回傳 ``(是否算登入, 缺少的項目)``。讀不到檔案時當作「無法判斷」——回傳
+    ``(True, [])``，因為這只是輔助檢查，不該擋下本來可能成功的下載。
+    """
+    try:
+        text = pathlib.Path(path).expanduser().read_text(
+            encoding="utf-8", errors="replace")
+    except OSError:
+        return True, []
+
+    names = set()
+    for line in text.splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        fields = line.split("\t")
+        if len(fields) >= 6 and "youtube.com" in fields[0]:
+            names.add(fields[5].strip())
+
+    missing = []
+    if _YT_LOGIN_COOKIE not in names:
+        missing.append(_YT_LOGIN_COOKIE)
+    if not names & set(_YT_SID_COOKIES):
+        missing.append("/".join(_YT_SID_COOKIES))
+    return not missing, missing
 
 
 def classify_url(url: str) -> str:
