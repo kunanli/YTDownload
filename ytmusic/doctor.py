@@ -95,7 +95,24 @@ def _targets(limit: int = 4) -> str:
     return f"{shown}…" if len(names) > limit else shown
 
 
-def environment() -> list[Check]:
+def cookie_checks(config) -> list[Check]:
+    """設定了 cookies 檔案時，先驗它裡面到底有沒有登入。
+
+    YouTube 對「cookies 沒登入」回的訊息跟「你是機器人」一模一樣，所以不主動驗的話，
+    使用者會被那句話帶去換 IP、調速度、等退燒——全都跟真正的原因無關。
+    """
+    from .utils import youtube_login_cookies
+
+    path = getattr(config, "cookies_file", None) if config else None
+    if not path:
+        return []
+    logged_in, missing = youtube_login_cookies(path)
+    if logged_in:
+        return [Check("cookies", OK, t("cookies.logged_in"))]
+    return [Check("cookies", BAD, t("cookies.no_login", names=", ".join(missing)))]
+
+
+def environment(config=None) -> list[Check]:
     """列出跟下載有關的每一項相依。"""
     from .utils import find_ffmpeg
 
@@ -118,6 +135,9 @@ def environment() -> list[Check]:
         checks.append(Check("mutagen", OK, mutagen.version_string))
     except Exception:
         checks.append(Check("mutagen", WARN, t("dep.mutagen_missing")))
+
+    for check in cookie_checks(config):
+        checks.append(check)
 
     usable, detail = js_runtime_status()
     # 這一項用 BAD 而不是 WARN：它不是「有的話更好」，是 YouTube 現在真的要。
