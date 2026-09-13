@@ -288,3 +288,18 @@ class TestSlowFlag:
     def test_no_throttle_by_default(self, tmp_path, monkeypatch):
         monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
         assert self._config(["dl", "URL"]).request_sleep == 0
+
+
+class TestCookieErrorHint:
+    def test_unreadable_cookies_get_their_own_advice(self, tmp_path, capsys):
+        from ytmusic.cli import _summarize
+        from ytmusic.config import Config
+        from ytmusic.downloader import Result, Track
+
+        failed = [Result(Track("x", "u", "X"), "error",
+                         message=r"[Errno 13] Permission denied: 'Firefox\Profiles\x'")]
+        _summarize(failed, Config(output_dir=tmp_path))
+        err = capsys.readouterr().err
+        # 要講「把瀏覽器關掉」，而不是「你被當成機器人」
+        assert "not a bot" not in err
+        assert "--slow" not in err

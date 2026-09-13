@@ -6,7 +6,7 @@ from ytmusic.downloader import (
     _final_path, _parse_rate, _rename_from_meta, _short_error, _unique_path,
     _walk, _is_network_error, _extract_over_ipv4, NETWORK_HINT,
     CURL_CFFI_SPEC, IMPERSONATE_HINT, RADIO_DEFAULT_MAX, BLOCKED_ABORT_AFTER,
-    is_blocked_error,
+    is_blocked_error, is_cookie_error,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -776,3 +776,28 @@ class TestRequestSleep:
         opts = Downloader(Config(output_dir=tmp_path))._base_opts()
         assert "sleep_interval_requests" not in opts
         assert "sleep_interval" not in opts
+
+
+class TestCookieErrors:
+    """讀不到 cookies 是本機問題——一個封包都還沒送出去。"""
+
+    def test_firefox_profile_locked_by_a_running_browser(self):
+        # 實際踩到的：Firefox 沒關乾淨，cookies 資料庫被鎖住
+        exc = Exception(r"[Errno 13] Permission denied: "
+                        r"'C:\Users\a\AppData\Roaming\Mozilla\Firefox\Profiles\x.default'")
+        assert is_cookie_error(exc)
+
+    def test_windows_chrome_app_bound_encryption(self):
+        assert is_cookie_error(Exception("2136 cookies could not be decrypted"))
+
+    def test_chrome_database_copy_failure(self):
+        assert is_cookie_error(Exception("Could not copy Chrome cookie database"))
+
+    def test_a_cookie_problem_is_not_a_block(self):
+        # 講成「被擋」的話，使用者會跑去等退燒、換 IP——而瀏覽器就開在旁邊
+        exc = Exception("[Errno 13] Permission denied: 'cookies.sqlite'")
+        assert not is_blocked_error(exc)
+
+    def test_a_real_block_is_still_a_block(self):
+        assert is_blocked_error(Exception("Sign in to confirm you're not a bot"))
+        assert not is_cookie_error(Exception("Sign in to confirm you're not a bot"))

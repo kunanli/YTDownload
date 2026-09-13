@@ -165,3 +165,22 @@ class TestBlockedConclusion:
             Check("強制 IPv4", OK, "讀得到：某某"),
         ])
         assert said != t("conclusion.blocked")
+
+
+class TestCookieErrorConclusion:
+    def test_locked_firefox_profile_is_not_a_network_verdict(self, tmp_path):
+        # 講成「這條網路不通」，使用者會去查防毒和 VPN——而正解是把瀏覽器關掉
+        from ytmusic.doctor import BAD, Check, conclusion, t
+
+        detail = r"[Errno 13] Permission denied: 'C:\...\Firefox\Profiles\x.default'"
+        said = conclusion([Check("一般連線", BAD, detail),
+                           Check("強制 IPv4", BAD, detail)])
+        assert said == t("cookies.unreadable")
+        assert said != t("conclusion.none")
+
+    def test_it_beats_the_blocked_verdict_too(self, tmp_path):
+        # cookies 讀不到的時候根本還沒連上站台，不可能是被站台擋
+        from ytmusic.doctor import BAD, Check, conclusion, t
+
+        said = conclusion([Check("一般連線", BAD, "[Errno 13] Permission denied: 'cookies.sqlite'")])
+        assert said == t("cookies.unreadable")

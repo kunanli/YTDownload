@@ -880,7 +880,25 @@ def _usable_js_runtimes() -> dict[str, str]:
 def is_blocked_error(exc: BaseException) -> bool:
     """判斷失敗是不是「被 YouTube 擋下來」，而不是這支影片本身有問題。"""
     message = strip_ansi(str(exc)).lower()
+    if is_cookie_error(exc):
+        return False  # 讀不到 cookies 而已，跟站台擋不擋人無關
     return any(marker in message for marker in _BLOCKED_MARKERS)
+
+
+# 讀瀏覽器 cookies 失敗的特徵。這是本機的問題——瀏覽器還開著把資料庫鎖住、
+# 路徑不存在、Windows 的 Chrome 解不開——完全沒有碰到網路，卻很容易被歸成
+# 「連不上」，然後使用者跑去查防毒和 VPN。
+_COOKIE_ERROR_MARKERS = (
+    "permission denied", "errno 13", "could not copy",
+    "cookie database", "cookies.sqlite", "database is locked",
+    "could not be decrypted", "unsupported browser",
+)
+
+
+def is_cookie_error(exc: BaseException) -> bool:
+    """判斷失敗是不是卡在「讀不到瀏覽器的 cookies」。"""
+    message = strip_ansi(str(exc)).lower()
+    return any(marker in message for marker in _COOKIE_ERROR_MARKERS)
 
 
 # curl_cffi 的版本區間是 yt-dlp 寫死的：不在區間內時 yt-dlp 只會說「target
