@@ -107,6 +107,7 @@ class Downloader:
         # 被 YouTube 當成機器人擋下來時立起來，供外層決定要印哪一種建議。
         self.blocked = False
         self._blocked_hits = 0
+        self._succeeded = 0
         self._blocked_lock = threading.Lock()
 
     # -- 前置檢查 ---------------------------------------------------------
@@ -126,20 +127,28 @@ class Downloader:
     def cancel(self) -> None:
         self._stop.set()
 
-    def _note_blocked(self) -> None:
-        """記一次「被當成機器人」，連續撞到夠多次就停掉整批。
+    def _note_success(self) -> None:
+        """記一次成功。只要有一首下得動，就證明這不是「整個被擋」。"""
+        with self._blocked_lock:
+            self._succeeded += 1
+            self._blocked_hits = 0  # 連續中斷了
 
-        一被擋就停太急躁：單一支影片本來就可能因為年齡限制或地區限制回 403。
-        但連著幾首都這樣，就不是影片的問題了，這時候繼續跑只是在拖時間，
-        還會讓封鎖更難解開。
+    def _note_blocked(self) -> None:
+        """記一次「被當成機器人」，連續夠多次、而且一首都沒成功，才停掉整批。
+
+        停手的前提是「這不是影片的問題，是整批都過不去」。只要已經有一首下得動，
+        那前提就不成立了：那幾支失敗的是「要登入才看得到」的影片，停掉整批只會讓
+        使用者連下得動的那三十幾首也拿不到——比看幾行錯誤訊息糟得多。
         """
         with self._blocked_lock:
+            if self._succeeded:
+                return  # 有東西下得動，就不是整批被擋
             self._blocked_hits += 1
             if self._blocked_hits < BLOCKED_ABORT_AFTER or self.blocked:
                 return
             self.blocked = True
         self._stop.set()
-        self._log(t("blocked.stopping"))
+        self._log(t("blocked.stopping", n=BLOCKED_ABORT_AFTER))
 
     def _retry_network(self, opts: dict, url: str,
                        failure: Exception) -> tuple[dict | None, Exception]:
@@ -402,6 +411,7 @@ class Downloader:
                 warnings.append(note)
 
         self._record(track, meta, path, info)
+        self._note_success()
 
         if self.reporter:
             suffix = f"（{warnings[0]}）" if warnings else ""
@@ -838,9 +848,16 @@ _BLOCKED_MARKERS = (
     "http error 429", "too many requests",
 )
 
-# 連續撞到幾次就停手。這類失敗跟影片無關，是這個 IP／這次工作階段整個被擋下來
-# 了：剩下的幾百首照跑只會一首一首地失敗，而且每多打一次就讓封鎖更久。
-BLOCKED_ABORT_AFTER = 3
+# 連續撞到幾次、而且一首都還沒成功，才停手。
+#
+# 門檻從 3 提高到 10，而且多了「零成功」這個條件，是因為原本的規則會把使用者害慘：
+# 「Sign in to confirm you're not a bot」這句話不只在整個 IP 被擋時出現——有些影片
+# 本來就要登入才看得到，YouTube 對它們回的也是這一句。同一張清單裡混著幾支這種影片
+# 時，舊規則會在第 3 支就把整批停掉，使用者一首都拿不到，儘管另外三十幾首根本下得動。
+#
+# 實測（同一秒、同一個 IP）：dQw4w9WgXcQ 讀得到，FIgyep0mJa8、79fzeNUqQbQ 回這句話。
+# 所以「有的行、有的不行」是常態，不是矛盾。
+BLOCKED_ABORT_AFTER = 10
 
 
 def _usable_js_runtimes() -> dict[str, str]:

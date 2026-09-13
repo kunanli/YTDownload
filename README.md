@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.21.1** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.22.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -1098,12 +1098,30 @@ python -m ytmusic doctor
 ✖ [78/496] Dear My Friend — Sign in to confirm you're not a bot. Use --cookies-from-browser…
 ```
 
-這跟影片無關，是**這次下載打得太密集**被判定成機器人了。連續撞到三次，工具就會
-自己停手（剩下的照跑只會一路失敗，還會讓封鎖更久），並印出該做什麼。
+**這句話有兩種完全不同的成因，先分清楚再動手** —— 搞錯方向會浪費好幾個小時。
 
-### 先試 `--slow`
+| 症狀 | 成因 | 解法 |
+| --- | --- | --- |
+| **有些下得動、有些不行** | 失敗的那幾支**本來就要登入才看得到** | 只有 cookies 能解 |
+| **全部都不行**，連平常下得動的也是 | 打太密集被盯上 | `--slow`、等一下、換網路 |
 
-**如果「一首一首下載得動、整批就不行」，那答案幾乎一定是這個。**
+**分不出來是哪一種？拿一支平常下得動的影片單獨試一次就知道了。**
+
+```powershell
+python -m ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+這支下得動 → 你是第一種，去弄 cookies，`--slow` 和換 IP 都幫不了你。
+這支也下不動 → 你是第二種，往下看 `--slow`。
+
+> 為什麼要特別講這個：YouTube 對「這支影片要登入」回的訊息，跟「你打太快」是
+> **同一句話**。實測同一秒、同一個 IP：`dQw4w9WgXcQ` 讀得到，`FIgyep0mJa8` 回
+> 「Sign in to confirm you're not a bot」。所以「有的行、有的不行」是常態，不是矛盾，
+> 更不代表你的網路有問題。
+
+### 第二種：`--slow`
+
+**「一首一首下載得動、整批就不行」才是這一種。**
 
 ```powershell
 python -m ytmusic dl "清單網址" --playlist --slow
@@ -1151,7 +1169,7 @@ python -m ytmusic doctor "https://www.youtube.com/watch?v=任一支影片"
 想立刻確認是不是這個 IP 的問題，換手機熱點再跑一次 `doctor`：熱點上通了，就確定是
 家裡這條線被記住了，等它退燒即可。
 
-### 還是不行才動 cookies
+### 第一種：非 cookies 不可
 
 1. 帶上已登入的 cookies：`--cookies-from-browser firefox`
 2. 或匯出 `cookies.txt` 再用 `--cookies cookies.txt`

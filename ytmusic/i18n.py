@@ -723,68 +723,98 @@ MESSAGES.update({
         "fi": "  Automaattinen miksi ei lopu koskaan, joten tällä kertaa otetaan vain {n} ensimmäistä (toinen määrä: --max N, ei rajaa: --max 0)",
     },
     "blocked.stopping": {
-        "zh-Hant": "  連續好幾首都被 YouTube 擋下來，先停在這裡——照這樣跑下去，剩下的只會一路失敗。",
-        "ja": "  立て続けに YouTube にブロックされたので、ここで止めます——このまま続けても残りは失敗するだけです。",
-        "en": "  Several in a row were blocked by YouTube, so stopping here — carrying on would just fail the rest.",
-        "ko": "  연달아 YouTube에 차단되어 여기서 멈춥니다 — 계속해도 나머지는 실패하기만 합니다.",
-        "es": "  Varias seguidas fueron bloqueadas por YouTube, así que paramos aquí: seguir solo haría fallar el resto.",
-        "fi": "  Useampi peräkkäin tyssäsi YouTuben estoon, joten pysähdytään tähän – jatkaminen vain kaataisi loput.",
+        "zh-Hant": "  前 {n} 首全部被擋，而且一首都沒成功——先停在這裡，再跑下去也是一樣。",
+        "ja": "  最初の {n} 件がすべてブロックされ、1 件も成功していません——ここで止めます。",
+        "en": "  The first {n} were all blocked and nothing succeeded — stopping here.",
+        "ko": "  처음 {n}개가 모두 차단되었고 성공한 것이 없습니다 — 여기서 멈춥니다.",
+        "es": "  Los primeros {n} fueron bloqueados y nada funcionó: paramos aquí.",
+        "fi": "  Ensimmäiset {n} estyivät eikä mikään onnistunut – pysähdytään tähän.",
     },
     "blocked.hint": {
-        "zh-Hant": """  YouTube 把這次的下載當成機器人了（Sign in to confirm you're not a bot／403）。
-  這不是影片的問題，也不是 yt-dlp 壞了。依序試：
-    1. 慢慢下載：在指令後面加 --slow（等同併行 1、每次請求之間停幾秒）
-       一個一個下載得動、整批就不行，就是這個原因：密集才是被盯上的特徵。
-       已經下載好的會自動略過，所以直接重跑就是接著跑，不會從頭來。
-    2. 帶上已登入的 cookies：--cookies-from-browser firefox
-       或匯出 cookies.txt 再用 --cookies cookies.txt——用無痕視窗登入、匯出、
-       然後直接關掉視窗（按了登出，那組 cookies 當場失效）
-    3. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP""",
-        "ja": """  YouTube に今回のダウンロードをボットと判定されました（Sign in to confirm you're not a bot／403）。
-  動画の問題でも yt-dlp の不具合でもありません。順に試してください：
-    1. ゆっくり落とす：コマンドに --slow を付ける（同時 1 件、リクエストの間に数秒待つ）
-       1 曲ずつなら落ちるのに一括だと駄目、というのはこれが原因です。密度こそが特徴です。
-       済んだ分は自動で飛ばすので、そのまま再実行すれば続きから進みます。
-    2. ログイン済みの cookies を渡す：--cookies-from-browser firefox
-       または cookies.txt を書き出して --cookies cookies.txt——シークレットウィンドウで
-       ログイン→書き出し→そのまま閉じる（ログアウトすると即座に無効になります）
-    3. 十数分おいてから再実行、またはネットワークを変えて（スマホのテザリング）IP を変える""",
-        "en": """  YouTube decided this run was a bot (Sign in to confirm you're not a bot / 403).
-  Nothing is wrong with the video or with yt-dlp. Try in order:
-    1. Go slow: add --slow (one at a time, with a few seconds between requests)
-       If one-by-one works but a batch doesn't, this is why — the rate is the tell.
-       Finished tracks are skipped automatically, so re-running just resumes.
-    2. Pass signed-in cookies: --cookies-from-browser firefox
-       or export a cookies.txt and use --cookies cookies.txt — sign in from a private
-       window, export, then close the window (signing out kills those cookies instantly)
-    3. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP""",
-        "ko": """  YouTube가 이번 다운로드를 봇으로 판단했습니다(Sign in to confirm you're not a bot / 403).
-  영상의 문제도 yt-dlp의 고장도 아닙니다. 순서대로 시도하세요:
-    1. 천천히 받기: 명령에 --slow 추가(동시 1개, 요청 사이에 몇 초 대기)
-       하나씩은 되는데 한꺼번에는 안 되는 이유가 이것입니다. 밀도가 바로 단서입니다.
-       받은 것은 자동으로 건너뛰므로 다시 실행하면 이어서 진행됩니다.
-    2. 로그인된 cookies 전달: --cookies-from-browser firefox
-       또는 cookies.txt로 내보낸 뒤 --cookies cookies.txt — 시크릿 창에서 로그인 →
-       내보내기 → 창을 그냥 닫기(로그아웃하면 그 cookies는 즉시 무효가 됩니다)
-    3. 십여 분 기다렸다가 다시 실행하거나, 네트워크를 바꿔(휴대폰 핫스팟) IP를 바꾸기""",
-        "es": """  YouTube ha tomado esta descarga por un bot (Sign in to confirm you're not a bot / 403).
-  No es culpa del vídeo ni de yt-dlp. Prueba en este orden:
-    1. Ve despacio: añade --slow (una a una, con unos segundos entre peticiones)
-       Si de una en una funciona y en lote no, es por esto: el ritmo es lo que te delata.
-       Lo ya descargado se omite solo, así que volver a ejecutarlo simplemente continúa.
-    2. Pasa cookies con la sesión iniciada: --cookies-from-browser firefox
-       o exporta un cookies.txt y usa --cookies cookies.txt — inicia sesión en una ventana
-       privada, exporta y cierra la ventana (si cierras sesión, esas cookies mueren al instante)
-    3. Espera diez y pico minutos, o cambia de red (datos del móvil) para dejar atrás la IP marcada""",
-        "fi": """  YouTube tulkitsi tämän ajon botiksi (Sign in to confirm you're not a bot / 403).
-  Vika ei ole videossa eikä yt-dlp:ssä. Kokeile järjestyksessä:
-    1. Hidasta: lisää --slow (yksi kerrallaan, muutama sekunti pyyntöjen väliin)
-       Jos yksi kerrallaan toimii mutta erä ei, tässä on syy – tiheys se paljastaa.
-       Valmiit ohitetaan automaattisesti, joten uusi ajo vain jatkaa siitä mihin jäi.
-    2. Anna kirjautuneen istunnon evästeet: --cookies-from-browser firefox
-       tai vie cookies.txt ja käytä --cookies cookies.txt – kirjaudu yksityisessä
-       ikkunassa, vie ja sulje ikkuna (uloskirjautuminen mitätöi ne heti)
-    3. Odota reilu kymmenen minuuttia tai vaihda verkkoa (puhelimen jaettu yhteys), niin IP vaihtuu""",
+        "zh-Hant": """  「Sign in to confirm you're not a bot」這句話有兩種完全不同的成因，先分清楚：
+
+  ● 有些下得動、有些不行 → 失敗的那幾支「本來就要登入才看得到」。
+    這跟你的網路、速度、下載幾首都無關，換 IP 也沒用——那幾支就是要帳號。
+    唯一的解是帶上已登入的 cookies：
+      --cookies-from-browser firefox
+      或匯出 cookies.txt 後用 --cookies cookies.txt
+      （用無痕視窗登入、匯出、然後直接關掉視窗；按了登出，那組 cookies 當場失效）
+
+  ● 全部都不行、連平常下得動的也不行 → 這才是「打太密集」被盯上。
+    加 --slow（併行 1、每次請求之間停幾秒）。已下載好的會自動略過，直接重跑即可。
+    或等十幾分鐘、換個網路（手機熱點）。
+
+  分不出來是哪一種？拿一支平常下得動的影片單獨試一次就知道了。""",
+        "ja": """  「Sign in to confirm you're not a bot」には原因が 2 通りあります。まず切り分けてください：
+
+  ● 落ちるものと落ちないものがある → 失敗する動画は「元々ログインが必要」です。
+    回線・速度・件数とは無関係で、IP を変えても無駄です——その動画にはアカウントが要ります。
+    唯一の解決はログイン済みの cookies を渡すこと：
+      --cookies-from-browser firefox
+      または cookies.txt を書き出して --cookies cookies.txt
+      （シークレットウィンドウでログイン→書き出し→そのまま閉じる。ログアウトすると即無効）
+
+  ● 全部駄目、普段落とせるものまで駄目 → こちらが「詰めすぎ」でマークされた状態です。
+    --slow を付けてください（同時 1 件、リクエストの間に数秒）。済んだ分は自動で飛ばします。
+    または十数分待つ、ネットワークを変える（スマホのテザリング）。
+
+  どちらか分からない？普段落とせる動画を 1 本だけ試せば分かります。""",
+        "en": """  "Sign in to confirm you're not a bot" has two completely different causes. Tell them apart first:
+
+  ● Some work, some don't → the failing ones simply require a signed-in account.
+    Nothing to do with your network, speed or how many you queued; changing IP won't help.
+    The only fix is signed-in cookies:
+      --cookies-from-browser firefox
+      or export a cookies.txt and use --cookies cookies.txt
+      (sign in from a private window, export, then close it — signing out kills them instantly)
+
+  ● Nothing works, not even videos that usually do → *this* is the rate-limit block.
+    Add --slow (one at a time, a few seconds between requests). Finished tracks are skipped,
+    so re-running just resumes. Or wait ten-odd minutes, or switch networks (phone hotspot).
+
+  Not sure which? Try one video that normally works, on its own. That answers it.""",
+        "ko": """  "Sign in to confirm you're not a bot"에는 전혀 다른 두 가지 원인이 있습니다. 먼저 구분하세요:
+
+  ● 되는 것도 있고 안 되는 것도 있다 → 실패하는 영상은 원래 로그인이 필요한 것입니다.
+    네트워크·속도·개수와 무관하며 IP를 바꿔도 소용없습니다 — 그 영상에는 계정이 필요합니다.
+    유일한 해결책은 로그인된 cookies입니다:
+      --cookies-from-browser firefox
+      또는 cookies.txt로 내보낸 뒤 --cookies cookies.txt
+      (시크릿 창에서 로그인 → 내보내기 → 그냥 닫기. 로그아웃하면 즉시 무효)
+
+  ● 전부 안 된다, 평소 되던 것도 안 된다 → 이것이 '너무 촘촘해서' 차단된 경우입니다.
+    --slow를 추가하세요(하나씩, 요청 사이에 몇 초). 받은 것은 자동으로 건너뜁니다.
+    또는 십여 분 기다리거나 네트워크를 바꾸세요(휴대폰 핫스팟).
+
+  어느 쪽인지 모르겠다면? 평소 되던 영상 하나만 따로 시도해 보면 알 수 있습니다.""",
+        "es": """  "Sign in to confirm you're not a bot" tiene dos causas muy distintas. Sepáralas primero:
+
+  ● Unos sí y otros no → los que fallan simplemente exigen una cuenta con sesión iniciada.
+    No tiene que ver con tu red, tu velocidad ni cuántos pediste; cambiar de IP no sirve.
+    La única solución son cookies con sesión iniciada:
+      --cookies-from-browser firefox
+      o exporta un cookies.txt y usa --cookies cookies.txt
+      (inicia sesión en una ventana privada, exporta y ciérrala; cerrar sesión las mata al instante)
+
+  ● No funciona nada, ni los que suelen funcionar → *esto* sí es el bloqueo por ritmo.
+    Añade --slow (de una en una, con segundos entre peticiones). Lo descargado se omite solo.
+    O espera diez y pico minutos, o cambia de red (datos del móvil).
+
+  ¿No sabes cuál es? Prueba a solas un vídeo que normalmente funcione. Eso lo responde.""",
+        "fi": """  "Sign in to confirm you're not a bot" johtuu kahdesta aivan eri asiasta. Erottele ensin:
+
+  ● Osa toimii, osa ei → epäonnistuvat vaativat yksinkertaisesti kirjautuneen tilin.
+    Ei liity verkkoon, nopeuteen eikä määrään; IP:n vaihtaminen ei auta – ne vaativat tilin.
+    Ainoa ratkaisu on kirjautuneen istunnon evästeet:
+      --cookies-from-browser firefox
+      tai vie cookies.txt ja käytä --cookies cookies.txt
+      (kirjaudu yksityisessä ikkunassa, vie ja sulje ikkuna; uloskirjautuminen mitätöi ne heti)
+
+  ● Mikään ei toimi, eivät edes yleensä toimivat → *tämä* on tahdista johtuva esto.
+    Lisää --slow (yksi kerrallaan, sekunteja pyyntöjen väliin). Valmiit ohitetaan automaattisesti.
+    Tai odota reilu kymmenen minuuttia tai vaihda verkkoa (puhelimen jaettu yhteys).
+
+  Etkö tiedä kummasta on kyse? Kokeile yksin videota joka yleensä toimii. Se vastaa siihen.""",
     },
     "js.hint": {
         "zh-Hant": """  這台機器上找不到 JavaScript runtime，而 YouTube 會把播放網址的一段參數用 JS 打亂。
