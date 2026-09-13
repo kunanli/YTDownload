@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.22.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.22.1** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -1168,6 +1168,25 @@ python -m ytmusic doctor "https://www.youtube.com/watch?v=任一支影片"
 
 想立刻確認是不是這個 IP 的問題，換手機熱點再跑一次 `doctor`：熱點上通了，就確定是
 家裡這條線被記住了，等它退燒即可。
+
+### `Permission denied` ／ 讀不到瀏覽器的 cookies
+
+設好 `--cookies-from-browser` 之後如果看到這個：
+
+```
+✖ 一般連線    [Errno 13] Permission denied: 'C:\...\Mozilla\Firefox\Profiles\xxxx.default'
+```
+
+**那個瀏覽器還在跑。** cookies 資料庫被它鎖住了 —— 這是本機的問題，跟網路一點關係都沒有。
+
+關掉視窗**不夠**，Firefox 和 Chrome 都會留背景程序：
+
+1. `Ctrl+Shift+Esc` 開工作管理員
+2. 找到該瀏覽器（可能有好幾個同名程序）→ 每個都「結束工作」
+3. 重跑
+
+Windows 上如果用的是 Chrome／Edge，訊息會是 `cookies could not be decrypted`，那是另一回事
+（127 版起的應用程式綁定加密），關再多次也沒用 —— 改用 Firefox 或 cookies.txt。
 
 ### 第一種：非 cookies 不可
 

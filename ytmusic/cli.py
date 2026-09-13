@@ -12,7 +12,7 @@ from . import __version__
 from .config import AUDIO_FORMATS, QUALITIES, Config, coerce_value
 from .downloader import (
     RADIO_DEFAULT_MAX, DownloadAborted, Downloader, Result, Track,
-    is_blocked_error,
+    is_blocked_error, is_cookie_error,
 )
 from .history import History, default_history_path
 from .i18n import t
@@ -756,9 +756,12 @@ def _summarize(results: list[Result], config: Config, *,
         print(f"  ! {result.message}：{result.warnings[0]}", file=sys.stderr)
     for result in failed:
         print(f"  ✖ {result.track.label} — {result.message}", file=sys.stderr)
-    # 「被當成機器人」跟「這支影片要帳號才看得到」都靠 cookies 解決，但原因不同，
-    # 該做的事也不同——混成同一句話，使用者只會照著錯的那半邊試。
-    if blocked or _is_blocked(failed):
+    # 「讀不到 cookies」要擺最前面：它根本還沒連上站台，卻會讓每一首都失敗，
+    # 看起來跟被擋一模一樣。剩下兩種都靠 cookies 解決，但原因不同、該做的事也
+    # 不同——混成同一句話，使用者只會照著錯的那半邊試。
+    if _cookies_unreadable(failed):
+        print("\n" + t("cookies.unreadable"), file=sys.stderr)
+    elif blocked or _is_blocked(failed):
         # 順序有意義：缺 JS runtime 會裝成「被擋」的樣子（403），而它是自己這台
         # 機器就能補好的；先叫人去弄 cookies，等於把最好修的那個原因藏在後面。
         if not find_js_runtimes():
@@ -941,6 +944,11 @@ def cmd_sync_run(args: argparse.Namespace) -> int:
 _COOKIE_HINT_MARKERS = (
     "403", "sign in", "not a bot", "drm", "age", "private video", "members-only",
 )
+
+
+def _cookies_unreadable(failed: list[Result]) -> bool:
+    """失敗是不是卡在「讀不到瀏覽器的 cookies」——本機問題，不是站台問題。"""
+    return any(is_cookie_error(Exception(result.message)) for result in failed)
 
 
 def _is_blocked(failed: list[Result]) -> bool:

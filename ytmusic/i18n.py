@@ -1083,6 +1083,37 @@ MESSAGES.update({
         "fi": "Vain täysi URL toimi – estetty on lyhytosoitteen verkkotunnus itse, ei sivusto.\n"
               "  Lisää --expand lataukseen, niin vaihto tapahtuu automaattisesti.",
     },
+    "cookies.unreadable": {
+        "zh-Hant": "讀不到瀏覽器的 cookies——這是本機的問題，連線一個封包都還沒送出去，"
+                   "查網路或防毒是白花力氣。最常見的原因是那個瀏覽器還在跑（關掉視窗還會留背景程序，"
+                   "要到工作管理員把它結束掉），其次是 Windows 上的 Chrome／Edge 從 127 版起 yt-dlp "
+                   "解不開。改用 Firefox，或匯出 cookies.txt 後用 --cookies 指定。",
+        "ja": "ブラウザの cookies を読めません——これはローカルの問題で、まだ 1 パケットも送っていません。"
+              "ネットワークやウイルス対策を疑うのは徒労です。よくある原因はそのブラウザがまだ動いていること"
+              "（ウィンドウを閉じてもバックグラウンドに残るので、タスクマネージャーで終了させてください）。"
+              "次に多いのは Windows の Chrome／Edge で、127 以降は yt-dlp では復号できません。"
+              "Firefox を使うか、cookies.txt を書き出して --cookies で指定してください。",
+        "en": "Can't read the browser's cookies — this is a local problem; not a single packet has gone out, "
+              "so looking at the network or antivirus is wasted effort. Usually the browser is still running "
+              "(closing the window leaves background processes — end them in Task Manager). The other common "
+              "cause is Chrome/Edge on Windows, which yt-dlp cannot decrypt since version 127. Use Firefox, "
+              "or export a cookies.txt and pass it with --cookies.",
+        "ko": "브라우저의 cookies를 읽을 수 없습니다 — 이것은 로컬 문제이며 패킷은 한 개도 나가지 않았습니다. "
+              "네트워크나 백신을 살피는 것은 헛수고입니다. 대개 그 브라우저가 아직 실행 중입니다"
+              "(창을 닫아도 백그라운드 프로세스가 남으니 작업 관리자에서 종료하세요). 다른 흔한 원인은 "
+              "Windows의 Chrome/Edge로, 127 버전부터 yt-dlp가 복호화하지 못합니다. Firefox를 쓰거나 "
+              "cookies.txt로 내보낸 뒤 --cookies로 지정하세요.",
+        "es": "No se pueden leer las cookies del navegador: es un problema local, no ha salido ni un paquete, "
+              "así que mirar la red o el antivirus es tiempo perdido. Normalmente el navegador sigue abierto "
+              "(cerrar la ventana deja procesos en segundo plano; ciérralos en el Administrador de tareas). "
+              "La otra causa común es Chrome/Edge en Windows, que yt-dlp no puede descifrar desde la versión 127. "
+              "Usa Firefox, o exporta un cookies.txt y pásalo con --cookies.",
+        "fi": "Selaimen evästeitä ei saada luettua – tämä on paikallinen ongelma, yhtäkään pakettia ei ole lähtenyt, "
+              "joten verkon tai virustorjunnan tutkiminen on turhaa. Yleensä selain on yhä käynnissä "
+              "(ikkunan sulkeminen jättää taustaprosesseja – lopeta ne Tehtävienhallinnasta). Toinen yleinen syy "
+              "on Windowsin Chrome/Edge, jota yt-dlp ei osaa purkaa versiosta 127 alkaen. Käytä Firefoxia tai "
+              "vie cookies.txt ja anna se --cookies-valitsimella.",
+    },
     "conclusion.blocked": {
         "zh-Hant": "三種方式都被站台擋下來了——它認得這個 IP，跟網路通不通無關，"
                    "查防毒或 VPN 是白花力氣。先停手：每多試一次都會讓標記更久。"

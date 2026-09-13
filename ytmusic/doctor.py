@@ -209,12 +209,16 @@ def _expanded(url: str, *, out) -> str:
 
 def conclusion(results: list[Check]) -> str:
     """把測試結果變成一句「所以你該做什麼」。"""
-    from .downloader import is_blocked_error
+    from .downloader import is_blocked_error, is_cookie_error
 
     if not results:
         return ""
     winners = [c for c in results if c.mark == OK]
     if not winners:
+        # 讀不到瀏覽器 cookies 是本機的問題，一個封包都還沒送出去。講成
+        # 「這條網路不通」，使用者就會跑去查防毒和 VPN，而正解是把瀏覽器關乾淨。
+        if any(is_cookie_error(Exception(c.detail)) for c in results):
+            return t("cookies.unreadable")
         # 「被 YouTube 擋下來」跟「這條網路連不到」長得很像——三種方式全滅——
         # 但處置完全相反：前者要停手等它退燒，後者要去查防毒、VPN、換網路。
         # 判斷錯的代價是使用者花一晚上查一個根本沒壞的東西。
