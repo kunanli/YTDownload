@@ -1053,6 +1053,39 @@ MESSAGES.update({
         "fi": "Vain täysi URL toimi – estetty on lyhytosoitteen verkkotunnus itse, ei sivusto.\n"
               "  Lisää --expand lataukseen, niin vaihto tapahtuu automaattisesti.",
     },
+    "conclusion.blocked": {
+        "zh-Hant": "三種方式都被站台擋下來了——它認得這個 IP，跟網路通不通無關，"
+                   "查防毒或 VPN 是白花力氣。先停手：每多試一次都會讓標記更久。"
+                   "隔一兩個小時再用 doctor 驗一次（doctor 只問一次，比真的下載便宜得多）；"
+                   "想立刻確認是不是 IP 的問題，換手機熱點再跑一次就知道。"
+                   "要馬上下載就得帶已登入的 cookies。",
+        "ja": "どの方法もサイト側にブロックされました——この IP を覚えられています。"
+              "接続の可否とは無関係なので、ウイルス対策や VPN を疑うのは徒労です。"
+              "まず手を止めてください：試すたびにマークが長引きます。"
+              "1〜2 時間おいて doctor で確認を（doctor は 1 回問い合わせるだけで、実際のダウンロードよりずっと軽いです）。"
+              "IP の問題か即座に確かめたければ、スマホのテザリングで実行してみてください。"
+              "今すぐ落としたいならログイン済みの cookies が要ります。",
+        "en": "Every method was blocked by the site — it recognises this IP. This has nothing to do with "
+              "whether the network works, so checking antivirus or VPN is wasted effort. Stop for now: "
+              "each attempt extends the mark. Check again with doctor in an hour or two (doctor asks once, "
+              "far cheaper than a real download); to confirm it's the IP, run it on a phone hotspot. "
+              "To download right now you need signed-in cookies.",
+        "ko": "세 방법 모두 사이트에 차단되었습니다 — 이 IP를 기억하고 있습니다. 네트워크 연결 여부와는 "
+              "무관하므로 백신이나 VPN을 의심하는 것은 헛수고입니다. 일단 멈추세요: 시도할 때마다 표시가 길어집니다. "
+              "한두 시간 뒤 doctor로 다시 확인하세요(doctor는 한 번만 요청하므로 실제 다운로드보다 훨씬 가볍습니다). "
+              "IP 문제인지 바로 확인하려면 휴대폰 핫스팟에서 실행해 보세요. "
+              "지금 당장 받으려면 로그인된 cookies가 필요합니다.",
+        "es": "Todos los métodos fueron bloqueados por el sitio: reconoce esta IP. No tiene nada que ver con "
+              "si la red funciona, así que mirar el antivirus o la VPN es tiempo perdido. Para ahora mismo: "
+              "cada intento alarga la marca. Vuelve a comprobarlo con doctor en una o dos horas (doctor pregunta "
+              "una sola vez, mucho más barato que una descarga real); para confirmar que es la IP, ejecútalo con "
+              "los datos del móvil. Para descargar ya mismo necesitas cookies con la sesión iniciada.",
+        "fi": "Sivusto esti kaikki tavat – se tunnistaa tämän IP:n. Tällä ei ole tekemistä verkon toimivuuden "
+              "kanssa, joten virustorjunnan tai VPN:n tutkiminen on hukkaan heitettyä vaivaa. Lopeta toistaiseksi: "
+              "jokainen yritys pidentää merkintää. Tarkista doctorilla parin tunnin päästä (doctor kysyy kerran, "
+              "paljon kevyempää kuin oikea lataus); varmistaaksesi että kyse on IP:stä, aja se puhelimen jaetussa "
+              "yhteydessä. Jos haluat ladata heti, tarvitset kirjautuneen istunnon evästeet.",
+    },
     "conclusion.none": {
         "zh-Hant": "三種方式都連不上。這條網路到這個站台是不通的——"
                    "換個網路（手機熱點）再跑一次 doctor，就能確定是網路還是站台的問題。",

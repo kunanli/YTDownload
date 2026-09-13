@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.21.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.21.1** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.
@@ -736,6 +736,26 @@ Still blocked with `--slow`? Push it up: `--sleep 5`.
 > python -m ytmusic config set concurrency 1
 > python -m ytmusic config set request_sleep 2
 > ```
+
+#### To check whether you're still blocked, use doctor — not another download
+
+```powershell
+python -m ytmusic doctor "https://www.youtube.com/watch?v=ANY_VIDEO"
+```
+
+`doctor` asks the site **once**; a real download asks seven or eight times per track.
+Retrying with downloads is adding fuel while waiting for the fire to die down — every
+attempt extends the mark.
+
+When you're blocked it says so plainly:
+
+```
+Every method was blocked by the site — it recognises this IP. This has nothing to do with
+whether the network works, so checking antivirus or VPN is wasted effort.
+```
+
+To confirm it's this IP, run `doctor` again on a phone hotspot: if it gets through there,
+your home connection is the one being remembered, and you just need to wait it out.
 
 #### Only then reach for cookies
 
