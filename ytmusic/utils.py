@@ -276,19 +276,49 @@ def _title_tokens(title: str) -> set[str]:
     return {tok for tok in cleaned.split() if len(tok) > 1 or not tok.isascii()}
 
 
+# 「這是另一個版本」的記號。原曲沒有這些字、候選有，就不是使用者要的那一首：
+# 把錄音室版偷偷換成演唱會版或翻唱，使用者要等到播出來才會發現。
+_OTHER_VERSION = re.compile(
+    r"""(?ix)
+    \blive\b | ライブ | ライヴ | 演唱會 | 武道館 | concert | tour
+    | the\s*first\s*take
+    | \bcover\b | カバー | 歌ってみた | 弾いてみた | 翻唱
+    | instrumental | カラオケ | off\s*vocal | \bremix\b
+    | メドレー | medley | 耐久 | \bmad\b | \bamv\b
+    """,
+)
+
+
 def same_song(wanted: str, candidate: str) -> bool:
     """判斷搜尋結果是不是同一首歌。
 
-    寧可漏掉也不要抓錯：下載到同名的翻唱、演唱會版或整張專輯，比「這首沒下到」
-    更糟——使用者不會發現，直到播放清單裡冒出一段四十分鐘的東西。所以要求原標題
-    的詞有大半都出現在候選標題裡，而不是只看相似度。
+    寧可漏掉也不要抓錯：抓錯的代價使用者當下不會發現，要等到播放清單裡冒出一首
+    完全不相干的歌才知道。三道關卡，全過才算：
+
+    1. 原標題的詞要有六成出現在候選標題裡
+    2. 標題很短時，候選也不能被無關的詞淹沒——``WILL`` 這種單字歌名，光靠第 1 點
+       會match到 ``NƠI TA CHỜ EM (OFFICIAL MV 4K) | WILL FT KAITY``（實際發生過，
+       下載到一首越南流行歌）
+    3. 原曲沒寫、候選卻寫了「live／THE FIRST TAKE／翻唱／合輯」，就不是同一個版本
     """
     want = _title_tokens(wanted)
     if not want:
         return False
     got = _title_tokens(candidate)
     overlap = len(want & got)
-    return overlap >= max(1, round(len(want) * 0.6))
+    if overlap < max(1, round(len(want) * 0.6)):
+        return False
+    # 極短的歌名（``WILL``、``謎``）特別容易誤中：這種標題幾乎一定能在某個長標題裡
+    # 找到。所以短到這個程度時，要求候選也得是差不多長度的東西，不能是一整串別的。
+    # 用字數而不是詞數，因為中日文整句常常只被算成一個詞。
+    wanted_chars = sum(len(tok) for tok in want)
+    if wanted_chars < 8:
+        got_chars = sum(len(tok) for tok in got)
+        if got_chars > wanted_chars * 3:
+            return False
+    if _OTHER_VERSION.search(candidate) and not _OTHER_VERSION.search(wanted):
+        return False
+    return True
 
 
 def classify_url(url: str) -> str:

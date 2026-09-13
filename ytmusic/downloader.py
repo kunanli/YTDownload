@@ -404,15 +404,22 @@ class Downloader:
             )
             self._log(t("alt.trying", title=track.label[:40],
                         other=candidate.title[:40]))
-            result = self._download_one(swapped, allow_alternative=False)
+            # 內層不碰進度列：替代版本是同一首歌的另一次嘗試，不是新的一首。
+            # 少了這個開關，每試一個版本就多跳一個編號，最後會印出 [29/24] 這種東西。
+            result = self._download_one(swapped, allow_alternative=False, report=False)
             if result.status == "ok":
-                result.warnings.append(t("alt.swapped", other=candidate.title[:60]))
+                note = t("alt.swapped", other=candidate.title[:60])
+                result.warnings.append(note)
+                if self.reporter:
+                    self.reporter.finish(track.video_id, "ok",
+                                         f"{result.message}（{note}）")
                 return result
         return None
 
     # -- 單曲下載 ---------------------------------------------------------
 
-    def _download_one(self, track: Track, *, allow_alternative: bool = True) -> Result:
+    def _download_one(self, track: Track, *, allow_alternative: bool = True,
+                      report: bool = True) -> Result:
         from yt_dlp import YoutubeDL
         from yt_dlp.utils import DownloadError
 
@@ -422,7 +429,7 @@ class Downloader:
         logger = _CollectingLogger()
         opts = self._download_opts(track, logger)
 
-        if self.reporter:
+        if self.reporter and report:
             self.reporter.start(track.video_id, track.label)
         subtitle_warning: str | None = None
         try:
@@ -443,7 +450,7 @@ class Downloader:
         except KeyboardInterrupt:
             self._stop.set()
             cancelled = t("dl.cancelled")
-            if self.reporter:
+            if self.reporter and report:
                 self.reporter.finish(track.video_id, "error",
                                      f"{track.label} — {cancelled}")
             return Result(track, "cancelled", message=cancelled)
@@ -456,7 +463,7 @@ class Downloader:
                     if swapped is not None:
                         return swapped
                 self._note_blocked()
-            if self.reporter:
+            if self.reporter and report:
                 self.reporter.finish(track.video_id, "error", f"{track.label} — {message}")
             return Result(track, "error", message=message)
 
@@ -469,7 +476,7 @@ class Downloader:
         )
 
         if self.config.write_tags:
-            if self.reporter:
+            if self.reporter and report:
                 self.reporter.update(track.video_id, stage="寫入標籤", percent=100.0)
             cover = self._maybe_cover(info)
             try:
@@ -495,7 +502,7 @@ class Downloader:
         self._record(track, meta, path, info)
         self._note_success()
 
-        if self.reporter:
+        if self.reporter and report:
             suffix = f"（{warnings[0]}）" if warnings else ""
             self.reporter.finish(track.video_id, "ok", f"{meta.as_display()}{suffix}")
         return Result(track, "ok", path=path, message=meta.as_display(), warnings=warnings)
