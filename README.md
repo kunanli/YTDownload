@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.21.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.22.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -1150,6 +1150,24 @@ python -m ytmusic dl "清單網址" --playlist --slow
 > python -m ytmusic config set concurrency 1
 > python -m ytmusic config set request_sleep 2
 > ```
+
+### 想知道「現在還被擋著嗎」，用 doctor 而不是再下載一次
+
+```powershell
+python -m ytmusic doctor "https://www.youtube.com/watch?v=任一支影片"
+```
+
+`doctor` 只向站台問**一次**，真正下載一首要問七、八次。反覆用下載去試，等於一邊等
+退燒一邊加柴——每試一次標記都更久。
+
+被擋著的時候它會直說：
+
+```
+三種方式都被站台擋下來了——它認得這個 IP，跟網路通不通無關，查防毒或 VPN 是白花力氣。
+```
+
+想立刻確認是不是這個 IP 的問題，換手機熱點再跑一次 `doctor`：熱點上通了，就確定是
+家裡這條線被記住了，等它退燒即可。
 
 ### 第一種：非 cookies 不可
 

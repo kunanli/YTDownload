@@ -118,3 +118,50 @@ class TestJsRuntimeStatus:
         monkeypatch.setattr("ytmusic.utils.find_js_runtimes", dict)
         check = next(c for c in mod.environment() if c.label == "JS runtime")
         assert check.mark == mod.BAD
+
+
+class TestBlockedConclusion:
+    """全滅有兩種：被站台擋，和網路根本不通。處置相反，不能給同一句話。"""
+
+    def _fail(self, label, detail):
+        from ytmusic.doctor import BAD, Check
+
+        return Check(label, BAD, detail)
+
+    def test_bot_check_is_not_reported_as_a_network_problem(self):
+        # 講成「這條網路不通」會害人整晚去查一個根本沒壞的防毒
+        from ytmusic.doctor import conclusion, t
+
+        said = conclusion([
+            self._fail("一般連線", "Sign in to confirm you're not a bot"),
+            self._fail("強制 IPv4", "Sign in to confirm you're not a bot"),
+        ])
+        assert said == t("conclusion.blocked")
+        assert said != t("conclusion.none")
+
+    def test_403_counts_as_blocked_too(self):
+        from ytmusic.doctor import conclusion, t
+
+        said = conclusion([
+            self._fail("一般連線", "HTTP Error 403: Forbidden"),
+            self._fail("強制 IPv4", "HTTP Error 403: Forbidden"),
+        ])
+        assert said == t("conclusion.blocked")
+
+    def test_real_network_failure_still_says_network(self):
+        from ytmusic.doctor import conclusion, t
+
+        said = conclusion([
+            self._fail("一般連線", "[SSL: UNEXPECTED_EOF_WHILE_READING]"),
+            self._fail("強制 IPv4", "[SSL: UNEXPECTED_EOF_WHILE_READING]"),
+        ])
+        assert said == t("conclusion.none")
+
+    def test_one_success_still_wins(self):
+        from ytmusic.doctor import OK, Check, conclusion, t
+
+        said = conclusion([
+            self._fail("一般連線", "Sign in to confirm you're not a bot"),
+            Check("強制 IPv4", OK, "讀得到：某某"),
+        ])
+        assert said != t("conclusion.blocked")
