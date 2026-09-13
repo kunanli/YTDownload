@@ -155,7 +155,9 @@ def probe_url(url: str, config, *, out=None) -> list[Check]:
     """同一個網址用每一種方式各試一次，回報哪一種通。"""
     from yt_dlp import YoutubeDL
 
-    from .downloader import Downloader, _CollectingLogger, _short_error
+    from .downloader import (
+        Downloader, _CollectingLogger, _short_error, is_cookie_error,
+    )
 
     out = out or sys.stderr
     base = Downloader(config)._base_opts()
@@ -171,7 +173,11 @@ def probe_url(url: str, config, *, out=None) -> list[Check]:
             with YoutubeDL({**base, **extra, "logger": logger}) as ydl:
                 info = ydl.extract_info(target, download=False)
         except Exception as exc:
-            return Check(name, BAD, _short_error(exc, logger)[:110])
+            detail = _short_error(exc, logger)
+            # 一般的失敗截短是為了版面。但本機的檔案問題剛好相反：訊息裡那條路徑
+            # 就是全部的線索，截掉檔名等於把答案藏起來——曾因此多繞一整輪才發現
+            # 卡住的根本不是 cookies.sqlite。
+            return Check(name, BAD, detail if is_cookie_error(exc) else detail[:110])
         title = (info or {}).get("title") or (info or {}).get("id") or "（沒有標題）"
         return Check(name, OK, t("doctor.readable", title=title[:60]))
 

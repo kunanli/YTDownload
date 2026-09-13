@@ -184,3 +184,60 @@ class TestCookieErrorConclusion:
 
         said = conclusion([Check("一般連線", BAD, "[Errno 13] Permission denied: 'cookies.sqlite'")])
         assert said == t("cookies.unreadable")
+
+
+class TestCookieErrorKeepsTheFullPath:
+    """本機檔案問題的訊息裡，那條路徑就是全部的線索。"""
+
+    def test_long_profile_path_is_not_truncated(self, monkeypatch, tmp_path):
+        import ytmusic.doctor as mod
+        from ytmusic.config import Config
+
+        path = (r"C:\Users\andyd\AppData\Roaming\Mozilla\Firefox"
+                r"\Profiles\0ajogb2d.default-release\cookies.sqlite")
+        message = f"[Errno 13] Permission denied: '{path}'"
+        assert len(message) > 110  # 舊的截斷剛好切在檔名前面
+
+        class Boom:
+            def __init__(self, opts):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def extract_info(self, url, download=False):
+                raise PermissionError(message)
+
+        import yt_dlp
+        monkeypatch.setattr(yt_dlp, "YoutubeDL", Boom)
+        monkeypatch.setattr(mod, "probes", lambda config: [("一般連線", "", {})])
+        checks = mod.probe_url("https://y/x", Config(output_dir=tmp_path),
+                               out=open(tmp_path / "log", "w"))
+        assert "cookies.sqlite" in checks[0].detail
+
+    def test_ordinary_errors_are_still_kept_short(self, monkeypatch, tmp_path):
+        import ytmusic.doctor as mod
+        from ytmusic.config import Config
+
+        class Boom:
+            def __init__(self, opts):
+                pass
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def extract_info(self, url, download=False):
+                raise RuntimeError("x" * 300)
+
+        import yt_dlp
+        monkeypatch.setattr(yt_dlp, "YoutubeDL", Boom)
+        monkeypatch.setattr(mod, "probes", lambda config: [("一般連線", "", {})])
+        checks = mod.probe_url("https://y/x", Config(output_dir=tmp_path),
+                               out=open(tmp_path / "log", "w"))
+        assert len(checks[0].detail) <= 110
