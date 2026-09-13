@@ -687,12 +687,37 @@ class TestBlockedAbort:
         assert not downloader.blocked
         assert not downloader._stop.is_set()
 
-    def test_stops_after_several_in_a_row(self, tmp_path):
+    def test_stops_after_several_in_a_row_with_nothing_working(self, tmp_path):
         downloader = self._downloader(tmp_path)
         for _ in range(BLOCKED_ABORT_AFTER):
             downloader._note_blocked()
         assert downloader.blocked
         assert downloader._stop.is_set()
+
+    def test_one_success_means_it_is_the_videos_not_the_block(self, tmp_path):
+        """有的下得動、有的不行——那幾支是「要登入才看得到」，不是整批被擋。
+
+        停掉整批會讓使用者連下得動的那三十幾首也拿不到，比看幾行錯誤訊息糟得多。
+        實測同一秒、同一個 IP：有些影片讀得到，有些回「not a bot」。
+        """
+        downloader = self._downloader(tmp_path)
+        downloader._note_success()
+        for _ in range(BLOCKED_ABORT_AFTER * 3):
+            downloader._note_blocked()
+        assert not downloader.blocked
+        assert not downloader._stop.is_set()
+
+    def test_a_success_resets_the_streak(self, tmp_path):
+        downloader = self._downloader(tmp_path)
+        for _ in range(BLOCKED_ABORT_AFTER - 1):
+            downloader._note_blocked()
+        downloader._note_success()
+        downloader._note_blocked()
+        assert not downloader.blocked
+
+    def test_threshold_is_high_enough_to_survive_a_few_login_only_videos(self):
+        # 舊的門檻是 3：清單開頭剛好混到三支要登入的，整批就沒了
+        assert BLOCKED_ABORT_AFTER >= 10
 
     def test_remaining_tracks_come_back_cancelled_not_failed(self, tmp_path):
         downloader = self._downloader(tmp_path)

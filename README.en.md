@@ -701,13 +701,31 @@ Easy to hit when you download hundreds of tracks in one go. The screen fills up 
 ✖ [78/496] Dear My Friend — Sign in to confirm you're not a bot. Use --cookies-from-browser…
 ```
 
-This is not about the videos: **the run was too dense** and got read as a bot. After
-three in a row the tool stops by itself (carrying on would just fail the rest and deepen
-the block) and prints what to do.
+**This message has two completely different causes.** Tell them apart before you act —
+guessing wrong costs hours.
 
-#### Try `--slow` first
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| **Some work, some don't** | The failing ones **require a signed-in account** | Only cookies help |
+| **Nothing works**, not even videos that usually do | Rate-limited | `--slow`, wait, change network |
 
-**If one-by-one works but a batch doesn't, this is almost certainly the answer.**
+**Not sure which? Try one video that normally works, on its own.**
+
+```powershell
+python -m ytmusic dl "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+It downloads → you're in the first row. Go get cookies; `--slow` and a new IP cannot help.
+It fails too → second row, read on.
+
+> Why this deserves its own section: YouTube returns the *same sentence* for "this video
+> needs a login" and for "you're going too fast". Measured in the same second from the same
+> IP: `dQw4w9WgXcQ` reads fine, `FIgyep0mJa8` returns "Sign in to confirm you're not a bot".
+> So "some work, some don't" is normal — not a contradiction, and not a network fault.
+
+#### Second row: `--slow`
+
+**"One-by-one works but a batch doesn't" is this one.**
 
 ```powershell
 python -m ytmusic dl "PLAYLIST_URL" --playlist --slow
@@ -737,7 +755,7 @@ Still blocked with `--slow`? Push it up: `--sleep 5`.
 > python -m ytmusic config set request_sleep 2
 > ```
 
-#### Only then reach for cookies
+#### First row: cookies are the only fix
 
 1. Pass signed-in cookies: `--cookies-from-browser firefox`
 2. Or export a `cookies.txt` and use `--cookies cookies.txt`
