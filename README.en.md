@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.22.2** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.23.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.

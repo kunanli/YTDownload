@@ -801,3 +801,48 @@ class TestCookieErrors:
     def test_a_real_block_is_still_a_block(self):
         assert is_blocked_error(Exception("Sign in to confirm you're not a bot"))
         assert not is_cookie_error(Exception("Sign in to confirm you're not a bot"))
+
+
+class TestCookieFileIsNeverModified:
+    """yt-dlp 會把 cookie jar 寫回 cookiefile，所以絕不能把使用者的原檔交出去。
+
+    症狀極難聯想到原因：第一次成功，之後每一次都被當成沒登入。實際踩到的畫面是
+    doctor 的三個探針——前兩個 ✔，第三個就已經 ✖ 了。
+    """
+
+    def _downloader(self, tmp_path, body="# Netscape HTTP Cookie File\n"):
+        cookies = tmp_path / "cookies.txt"
+        cookies.write_text(body)
+        config = Config(output_dir=tmp_path, cookies_file=str(cookies))
+        return Downloader(config), cookies
+
+    def test_ytdlp_never_sees_the_original_path(self, tmp_path):
+        downloader, cookies = self._downloader(tmp_path)
+        handed_over = downloader._base_opts()["cookiefile"]
+        assert handed_over != str(cookies)
+
+    def test_the_copy_has_the_same_content(self, tmp_path):
+        downloader, cookies = self._downloader(tmp_path, "# real cookies\n.youtube.com\tTRUE\n")
+        handed_over = Path(downloader._base_opts()["cookiefile"])
+        assert handed_over.read_text() == cookies.read_text()
+
+    def test_each_call_starts_from_the_pristine_original(self, tmp_path):
+        # doctor 連跑三個探針就是這樣壞掉的：第一個把檔案寫壞，第三個就失敗了
+        downloader, cookies = self._downloader(tmp_path, "original\n")
+        first = Path(downloader._base_opts()["cookiefile"])
+        first.write_text("rotated and now useless\n")   # 模擬 yt-dlp 寫回
+        second = Path(downloader._base_opts()["cookiefile"])
+        assert second.read_text() == "original\n"
+
+    def test_writing_to_what_ytdlp_got_leaves_the_original_alone(self, tmp_path):
+        downloader, cookies = self._downloader(tmp_path, "original\n")
+        Path(downloader._base_opts()["cookiefile"]).write_text("clobbered\n")
+        assert cookies.read_text() == "original\n"
+
+    def test_no_cookies_configured_means_no_option(self, tmp_path):
+        assert "cookiefile" not in Downloader(Config(output_dir=tmp_path))._base_opts()
+
+    def test_an_unreadable_original_still_reaches_ytdlp(self, tmp_path):
+        # 複製不動時寧可讓 yt-dlp 自己報錯，也不要在這裡把整批下載擋掉
+        config = Config(output_dir=tmp_path, cookies_file=str(tmp_path / "missing.txt"))
+        assert Downloader(config)._base_opts()["cookiefile"].endswith("missing.txt")
