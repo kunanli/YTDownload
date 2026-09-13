@@ -294,7 +294,10 @@ def _slow_flag(ask: Callable[[str], str]) -> list[str]:
     選單使用者沒有地方可以打 -j 或 --sleep，而「一首一首下得動、整批就被擋」
     正是他們最常撞到的牆——不問的話，他們只能眼睜睜看著同一件事一直失敗。
     """
-    return ["--slow"] if ask_yes(ask, "ask.slow") else []
+    flags = ["--slow"] if ask_yes(ask, "ask.slow") else []
+    if ask_yes(ask, "ask.alt"):
+        flags.append("--alt")
+    return flags
 
 
 def _mix_flags(url: str, ask: Callable[[str], str]) -> list[str]:

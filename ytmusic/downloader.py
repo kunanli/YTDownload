@@ -21,7 +21,8 @@ from .tagger import (
 from .i18n import t
 from .utils import (
     FFMPEG_HINT, find_ffmpeg, find_js_runtimes, is_radio_playlist,
-    parse_browser_spec, sanitize_filename, strip_ansi, vimeo_player_url,
+    parse_browser_spec, same_song, sanitize_filename, strip_ansi,
+    vimeo_player_url,
 )
 
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
@@ -90,7 +91,8 @@ class Downloader:
                  reporter: ProgressReporter | None = None,
                  verbose: bool = False, video: str | None = None,
                  subs: str | None = None, lyrics: str | None = None,
-                 max_tracks: int | None = None) -> None:
+                 max_tracks: int | None = None,
+                 find_alternatives: bool = False) -> None:
         self.config = config
         self.history = history
         self.reporter = reporter
@@ -103,6 +105,8 @@ class Downloader:
         self.impersonate = config.impersonate
         # 每個網址最多取幾首（None 代表不設限）。混音清單沒有盡頭，一定要有個數字。
         self.max_tracks = max_tracks
+        # 原上傳版本鎖登入時，要不要自己去找別人上傳的同一首。
+        self.find_alternatives = find_alternatives
         # 短網址展開會把網址送給第三方，所以由外層取得同意後才掛上來。
         self.expander = None
         self._stop = threading.Event()
@@ -368,9 +372,47 @@ class Downloader:
                 raise
         return results
 
+    def _try_alternative(self, track: Track) -> Result | None:
+        """原上傳版本鎖登入時，換一個別人上傳的同一首。
+
+        鎖登入的通常是唱片公司的官方帳號；同一首歌的其他上傳往往沒鎖。實測同一份
+        混音清單重跑幾次，光是碰運氣換到不同上傳者就多拿到十幾首——這裡把那件事
+        變成不用碰運氣。
+
+        找不到就回 None，讓原本的失敗照常回報：這是加分項，不該把「這首下不到」
+        變成別的錯誤。
+        """
+        if self._stop.is_set():
+            return None
+        try:
+            candidates = self.search(track.title, limit=5)
+        except Exception:
+            return None  # 搜尋本身失敗就算了，別讓加分項變成新的失敗原因
+
+        for candidate in candidates:
+            if candidate.video_id == track.video_id:
+                continue
+            if not same_song(track.title, candidate.title):
+                continue
+            swapped = Track(
+                video_id=candidate.video_id,
+                url=candidate.url,
+                title=track.title,          # 保留原標題，標籤與檔名才不會跟著上傳者跑
+                playlist_title=track.playlist_title,
+                playlist_index=track.playlist_index,
+                playlist_count=track.playlist_count,
+            )
+            self._log(t("alt.trying", title=track.label[:40],
+                        other=candidate.title[:40]))
+            result = self._download_one(swapped, allow_alternative=False)
+            if result.status == "ok":
+                result.warnings.append(t("alt.swapped", other=candidate.title[:60]))
+                return result
+        return None
+
     # -- 單曲下載 ---------------------------------------------------------
 
-    def _download_one(self, track: Track) -> Result:
+    def _download_one(self, track: Track, *, allow_alternative: bool = True) -> Result:
         from yt_dlp import YoutubeDL
         from yt_dlp.utils import DownloadError
 
@@ -408,6 +450,11 @@ class Downloader:
         except Exception as exc:
             message = _short_error(exc, logger)
             if is_blocked_error(exc):
+                # 鎖登入的多半只是「這個上傳版本」鎖，別人上傳的同一首常常沒鎖。
+                if allow_alternative and self.find_alternatives:
+                    swapped = self._try_alternative(track)
+                    if swapped is not None:
+                        return swapped
                 self._note_blocked()
             if self.reporter:
                 self.reporter.finish(track.video_id, "error", f"{track.label} — {message}")

@@ -155,6 +155,8 @@ def _add_download_options(p) -> None:
     p.add_argument("--rate-limit", metavar="RATE", help="限速，例如 500K、1.5M")
     p.add_argument("--sleep", dest="request_sleep", type=float, metavar="秒",
                    help="每次向站台要東西之間停幾秒，用來避開「打太密集」的判定")
+    p.add_argument("--alt", action="store_true", dest="find_alternatives",
+                   help="鎖登入的歌自動改抓別人上傳的同一首")
     p.add_argument("--slow", action="store_true",
                    help=f"慢慢下載：等同 -j 1 --sleep {SLOW_SLEEP:g}，被當成機器人時用這個")
     p.add_argument("--no-progress", action="store_true", help="關閉進度列，只輸出純文字")
@@ -668,7 +670,8 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
                             verbose=args.verbose, video=args.video,
                             subs=_langs(args.subs, config),
                             lyrics=_langs(args.lyrics, config),
-                            max_tracks=getattr(args, "max_tracks", None))
+                            max_tracks=getattr(args, "max_tracks", None),
+                            find_alternatives=getattr(args, "find_alternatives", False))
     downloader.expander = _short_url_expander(urls, args, config)
 
     try:

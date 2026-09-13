@@ -363,3 +363,41 @@ class TestYoutubeLoginCookies:
         from ytmusic.utils import youtube_login_cookies
 
         assert youtube_login_cookies(tmp_path / "nope.txt") == (True, [])
+
+
+class TestSameSong:
+    """全部取自實際跑出來的標題：混音清單裡同一首歌的不同上傳版本。"""
+
+    def _yes(self, wanted, candidate):
+        from ytmusic.utils import same_song
+
+        assert same_song(wanted, candidate), f"{wanted!r} 應該對上 {candidate!r}"
+
+    def _no(self, wanted, candidate):
+        from ytmusic.utils import same_song
+
+        assert not same_song(wanted, candidate), f"{wanted!r} 不該對上 {candidate!r}"
+
+    def test_uploader_prefixed(self):
+        self._yes("ヒカルの碁 OP2　I'll Be The One　Full",
+                  "TAKAPON921 - ヒカルの碁 OP2 I'll Be The One Full")
+
+    def test_artist_prefixed(self):
+        self._yes("JUST COMMUNICATION", "TWO-MIX - JUST COMMUNICATION")
+
+    def test_suffix_in_the_other_direction(self):
+        self._yes("馬渡松子 - 微笑みの爆弾", "微笑みの爆弾 (幽☆遊☆白書の主題歌)")
+
+    def test_official_video_noise_is_ignored(self):
+        self._yes("Every Little Thing - Dear My Friend",
+                  "「Dear My Friend 」MUSIC VIDEO / Every Little Thing")
+
+    def test_a_different_song_is_rejected(self):
+        self._no("My will", "Do As Infinity / Fukai Mori（Deep into the Forest）")
+
+    def test_a_three_hour_medley_is_rejected(self):
+        # 抓錯的代價比漏抓高：使用者不會發現，直到播放清單裡冒出四十分鐘的東西
+        self._no("Every Heart-ミンナノキモチ-", "90年代アニソンメドレー 3時間耐久 作業用BGM")
+
+    def test_empty_title_never_matches(self):
+        self._no("", "隨便什麼")

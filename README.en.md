@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.24.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.25.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.
@@ -838,6 +838,7 @@ python -m pip install -U yt-dlp     # sites change; this is the usual fix
 | `--playlist-folder` | Folder per playlist, track numbers in filenames |
 | `--max N` | Cap tracks per URL (`0` = no limit; Mixes default to 50) |
 | `--slow` | Go slow: same as `-j 1 --sleep 2`, for when you get flagged as a bot |
+| `--alt` | For login-locked tracks, automatically try someone else's upload |
 | `--sleep SEC` | Seconds to wait between requests to the site |
 | `--force` | Ignore history, download anyway |
 | `--dry-run` | List what would be downloaded, download nothing |
