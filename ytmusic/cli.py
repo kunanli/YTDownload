@@ -10,7 +10,10 @@ from pathlib import Path
 
 from . import __version__
 from .config import AUDIO_FORMATS, QUALITIES, Config, coerce_value
-from .downloader import DownloadAborted, Downloader, Result, Track
+from .downloader import (
+    RADIO_DEFAULT_MAX, DownloadAborted, Downloader, Result, Track,
+    is_blocked_error,
+)
 from .history import History, default_history_path
 from .i18n import t
 from .progress import ProgressReporter
@@ -18,7 +21,9 @@ from .search import (
     SelectionError, filter_by_artist, format_results, parse_selection,
 )
 from .subscriptions import SubscriptionError, Subscriptions
-from .utils import classify_url, human_size, is_radio_playlist
+from .utils import (
+    classify_url, find_js_runtimes, human_size, is_radio_playlist,
+)
 
 VIDEO_QUALITIES = ("best", "2160", "1440", "1080", "720", "480", "360")
 # 預設抓中文，抓不到就退英文；zh-Hant/zh-Hans 涵蓋繁簡自動字幕。
@@ -124,6 +129,9 @@ def _add_download_options(p) -> None:
     p.add_argument("-j", "--jobs", type=int, metavar="N", help="同時下載數（預設 3，上限 16）")
     p.add_argument("--playlist-folder", action="store_true", default=None,
                    help="以播放清單名稱建立子資料夾")
+    p.add_argument("--max", dest="max_tracks", type=int, metavar="N",
+                   help="每個網址最多下載幾首（0 表示不設限；自動混音清單預設 "
+                        f"{RADIO_DEFAULT_MAX} 首）")
     p.add_argument("--no-convert", action="store_true",
                    help="不轉檔，保留 YouTube 原始音訊（不需要 ffmpeg）")
     p.add_argument("--no-tags", action="store_true", help="不寫入 ID3／中繼資料標籤")
@@ -634,7 +642,8 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
     downloader = Downloader(config, history=history, reporter=reporter,
                             verbose=args.verbose, video=args.video,
                             subs=_langs(args.subs, config),
-                            lyrics=_langs(args.lyrics, config))
+                            lyrics=_langs(args.lyrics, config),
+                            max_tracks=getattr(args, "max_tracks", None))
     downloader.expander = _short_url_expander(urls, args, config)
 
     try:
@@ -675,7 +684,7 @@ def _download_urls(urls: list[str], args: argparse.Namespace, *,
         if history:
             history.close()
 
-    return _summarize(results, config)
+    return _summarize(results, config, blocked=downloader.blocked)
 
 
 def _print_plan(config: Config, tracks, pending, skipped, video: str | None = None) -> None:
@@ -695,9 +704,13 @@ def _print_plan(config: Config, tracks, pending, skipped, video: str | None = No
           file=sys.stderr)
 
 
-def _summarize(results: list[Result], config: Config) -> int:
+def _summarize(results: list[Result], config: Config, *,
+               blocked: bool = False) -> int:
     ok = [r for r in results if r.status == "ok"]
     failed = [r for r in results if r.status == "error"]
+    # 中途停手時沒輪到的曲目。它們一首都還沒試過，逐條印出來只是把真正的原因
+    # 洗掉——那才是使用者要看的東西——所以只報個數字。
+    cancelled = [r for r in results if r.status == "cancelled"]
     warned = [r for r in ok if r.warnings]
 
     total_bytes = 0
@@ -710,6 +723,7 @@ def _summarize(results: list[Result], config: Config) -> int:
     print(
         "\n" + t("dl.done", n=len(ok))
         + (t("dl.failed_count", n=len(failed)) if failed else "")
+        + (t("dl.cancelled_count", n=len(cancelled)) if cancelled else "")
         + t("dl.total_size", size=human_size(total_bytes), dir=config.output_dir),
         file=sys.stderr,
     )
@@ -717,14 +731,24 @@ def _summarize(results: list[Result], config: Config) -> int:
         print(f"  ! {result.message}：{result.warnings[0]}", file=sys.stderr)
     for result in failed:
         print(f"  ✖ {result.track.label} — {result.message}", file=sys.stderr)
-    if _needs_cookies(failed):
-        print(
-            "\n提示：403 / 需要登入 / DRM 的影片通常要帶上帳號 cookies 才能下載，"
-            "\n      試試 --cookies-from-browser chrome（或 firefox、edge）。",
-            file=sys.stderr,
-        )
+    # 「被當成機器人」跟「這支影片要帳號才看得到」都靠 cookies 解決，但原因不同，
+    # 該做的事也不同——混成同一句話，使用者只會照著錯的那半邊試。
+    if blocked or _is_blocked(failed):
+        # 順序有意義：缺 JS runtime 會裝成「被擋」的樣子（403），而它是自己這台
+        # 機器就能補好的；先叫人去弄 cookies，等於把最好修的那個原因藏在後面。
+        if not find_js_runtimes():
+            print("\n" + t("js.hint"), file=sys.stderr)
+        print("\n" + t("blocked.hint"), file=sys.stderr)
+        if sys.platform == "win32":
+            # Windows 上「--cookies-from-browser chrome」幾乎一定失敗，讓使用者
+            # 照著試一遍再回來，等於白繞一圈。
+            print(t("blocked.chrome_windows"), file=sys.stderr)
+    elif _needs_cookies(failed):
+        print("\n" + t("cookies.hint"), file=sys.stderr)
+        if sys.platform == "win32":
+            print(t("blocked.chrome_windows"), file=sys.stderr)
 
-    if failed:
+    if failed or cancelled:
         return EXIT_PARTIAL if ok else EXIT_FAILED
     return EXIT_OK
 
@@ -892,6 +916,11 @@ def cmd_sync_run(args: argparse.Namespace) -> int:
 _COOKIE_HINT_MARKERS = (
     "403", "sign in", "not a bot", "drm", "age", "private video", "members-only",
 )
+
+
+def _is_blocked(failed: list[Result]) -> bool:
+    """失敗裡有沒有「被 YouTube 擋下來」那一種。"""
+    return any(is_blocked_error(Exception(result.message)) for result in failed)
 
 
 def _needs_cookies(failed: list[Result]) -> bool:

@@ -164,3 +164,96 @@ class TestShortUrlExpander:
                                        Config())
         expander("https://lnkd.in/p/a")
         assert seen["service"] == "https://mine/{url}"
+
+
+class TestMaxFlag:
+    def test_absent_means_no_explicit_cap(self):
+        assert build_parser().parse_args(["dl", "URL"]).max_tracks is None
+
+    def test_accepts_a_number(self):
+        assert build_parser().parse_args(["dl", "URL", "--max", "20"]).max_tracks == 20
+
+    def test_zero_is_allowed_and_means_no_limit(self):
+        assert build_parser().parse_args(["dl", "URL", "--max", "0"]).max_tracks == 0
+
+    def test_search_and_sync_take_it_too(self):
+        # 三個子指令共用同一組下載選項，漏掉一個就會在那裡爆掉
+        assert build_parser().parse_args(["search", "x", "--max", "5"]).max_tracks == 5
+        assert build_parser().parse_args(["sync", "--max", "5"]).max_tracks == 5
+
+    def test_does_not_collide_with_search_result_count(self):
+        args = build_parser().parse_args(["search", "x", "-n", "3", "--max", "9"])
+        assert (args.limit, args.max_tracks) == (3, 9)
+
+
+class TestSummaryHints:
+    """被擋跟「要帳號才看得到」是兩回事，給錯建議會讓人白試一輪。"""
+
+    def _result(self, message, status="error"):
+        from ytmusic.downloader import Result, Track
+
+        return Result(Track("x", "https://y/x", "X"), status, message=message)
+
+    def _summarize(self, results, tmp_path, **kwargs):
+        from ytmusic.cli import _summarize
+        from ytmusic.config import Config
+
+        return _summarize(results, Config(output_dir=tmp_path), **kwargs)
+
+    def test_bot_check_gets_the_blocked_advice(self, tmp_path, capsys):
+        self._summarize([self._result("Sign in to confirm you're not a bot")],
+                        tmp_path)
+        err = capsys.readouterr().err
+        assert "--cookies-from-browser firefox" in err
+        assert "-j 1" in err  # 少開幾條同時下載才是根治的那一半
+
+    def test_members_only_gets_the_plain_cookie_advice(self, tmp_path, capsys):
+        self._summarize([self._result("Join this channel: members-only content")],
+                        tmp_path)
+        err = capsys.readouterr().err
+        assert "--cookies" in err
+        assert "not a bot" not in err  # 不是被擋，別扯到機器人
+
+    def test_ordinary_failure_gets_no_cookie_advice(self, tmp_path, capsys):
+        self._summarize([self._result("Video unavailable")], tmp_path)
+        assert "--cookies" not in capsys.readouterr().err
+
+    def test_windows_is_warned_off_chrome(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setattr("sys.platform", "win32")
+        self._summarize([self._result("HTTP Error 403: Forbidden")], tmp_path)
+        assert "Chrome" in capsys.readouterr().err
+
+    def test_cancelled_tracks_are_counted_not_listed(self, tmp_path, capsys):
+        # 停手之後沒輪到的那幾百首逐條印出來，只會把真正的原因洗掉
+        results = [self._result("Sign in to confirm you're not a bot")]
+        results += [self._result("已取消", status="cancelled") for _ in range(200)]
+        self._summarize(results, tmp_path, blocked=True)
+        err = capsys.readouterr().err
+        assert err.count("已取消") <= 1
+        assert "200" in err
+
+
+class TestJsRuntimeAdvice:
+    """403 長得像「被擋」，但缺 JS runtime 也是這個症狀——而那個是自己就能修的。"""
+
+    def _summarize(self, tmp_path, **kwargs):
+        from ytmusic.cli import _summarize
+        from ytmusic.config import Config
+        from ytmusic.downloader import Result, Track
+
+        failed = [Result(Track("x", "https://y/x", "X"), "error",
+                         message="HTTP Error 403: Forbidden")]
+        return _summarize(failed, Config(output_dir=tmp_path), **kwargs)
+
+    def test_missing_runtime_is_raised_first(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setattr("ytmusic.cli.find_js_runtimes", dict)
+        self._summarize(tmp_path)
+        err = capsys.readouterr().err
+        assert "deno" in err
+        assert err.index("deno") < err.index("--cookies-from-browser")
+
+    def test_installed_runtime_is_not_mentioned(self, tmp_path, capsys, monkeypatch):
+        monkeypatch.setattr("ytmusic.cli.find_js_runtimes",
+                            lambda: {"deno": "/bin/deno"})
+        self._summarize(tmp_path)
+        assert "deno" not in capsys.readouterr().err

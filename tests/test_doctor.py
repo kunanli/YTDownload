@@ -89,3 +89,32 @@ class TestMissingAdvice:
 
     def test_empty_when_all_good(self):
         assert missing_advice([Check("yt-dlp", OK, "x")]) == []
+
+
+class TestJsRuntimeStatus:
+    """缺 JS runtime 是現在 YouTube 下載最常見的絆腳石，但錯誤訊息從不明說。"""
+
+    def test_reports_what_it_found(self, monkeypatch):
+        import ytmusic.doctor as mod
+
+        monkeypatch.setattr(mod, "t", lambda key, **kw: kw.get("names", key))
+        monkeypatch.setattr("ytmusic.utils.find_js_runtimes",
+                            lambda: {"deno": "/usr/bin/deno"})
+        usable, detail = mod.js_runtime_status()
+        assert usable
+        assert "/usr/bin/deno" in detail
+
+    def test_missing_runtime_is_not_usable(self, monkeypatch):
+        import ytmusic.doctor as mod
+
+        monkeypatch.setattr("ytmusic.utils.find_js_runtimes", dict)
+        usable, _ = mod.js_runtime_status()
+        assert not usable
+
+    def test_counts_as_a_blocking_problem_not_a_warning(self, monkeypatch):
+        # YouTube 現在真的要它，不是「有更好」——報成 ! 的話使用者會直接略過
+        import ytmusic.doctor as mod
+
+        monkeypatch.setattr("ytmusic.utils.find_js_runtimes", dict)
+        check = next(c for c in mod.environment() if c.label == "JS runtime")
+        assert check.mark == mod.BAD

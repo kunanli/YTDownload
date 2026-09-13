@@ -61,6 +61,27 @@ def impersonation_status() -> tuple[bool, str]:
                    targets=_targets() or t("dep.no_targets"))
 
 
+def js_runtime_status() -> tuple[bool, str]:
+    """有沒有 JS runtime——這是目前 YouTube 下載最常見的絆腳石。
+
+    yt-dlp 從 2025 下半年起把「沒有 JS runtime」標成 deprecated：解不開 YouTube
+    的簽章挑戰，可選畫質就少一大半，或者下載到一半被回 403。但它不會直說缺什麼，
+    訊息只有一句 unable to download video data——所以這裡要主動驗。
+    """
+    from .utils import find_js_runtimes
+
+    try:  # 舊版 yt-dlp 還沒有這套機制，就不該報成缺東西
+        from yt_dlp.extractor.youtube import jsc  # noqa: F401
+    except Exception:
+        return True, t("dep.js_not_needed")
+
+    found = find_js_runtimes()
+    if not found:
+        return False, t("dep.js_missing")
+    names = ", ".join(f"{name} ({path})" for name, path in list(found.items())[:2])
+    return True, t("dep.js_usable", names=names)
+
+
 def _targets(limit: int = 4) -> str:
     """列出幾個可用的 impersonate 目標，證明它是真的能用。"""
     try:
@@ -97,6 +118,10 @@ def environment() -> list[Check]:
         checks.append(Check("mutagen", OK, mutagen.version_string))
     except Exception:
         checks.append(Check("mutagen", WARN, t("dep.mutagen_missing")))
+
+    usable, detail = js_runtime_status()
+    # 這一項用 BAD 而不是 WARN：它不是「有的話更好」，是 YouTube 現在真的要。
+    checks.append(Check("JS runtime", OK if usable else BAD, detail))
 
     available, detail = impersonation_status()
     checks.append(Check("curl_cffi", OK if available else WARN, detail))

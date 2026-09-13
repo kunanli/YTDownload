@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.19.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.20.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.
@@ -50,6 +50,7 @@ Setup is a one-time job, about 10 minutes.
 | Download WeChat Channels | `python -m ytmusic wechat "URL"` | [here](#wechat-channels) |
 | Download a whole playlist | `python -m ytmusic dl "URL" --playlist` | [here](#download-a-whole-playlist) |
 | One folder per playlist | add `--playlist-folder` | [here](#download-a-whole-playlist) |
+| Download a YouTube Mix | `python -m ytmusic dl "URL" --playlist --max 50` | [here](#download-a-whole-playlist) |
 | Download video | `python -m ytmusic dl "URL" --video 1080` | [here](#download-video) |
 | Get lyrics too | add `--lyrics` | [here](#lyrics-and-subtitles) |
 | Embed subtitles | add `--subs` | [here](#lyrics-and-subtitles) |
@@ -82,6 +83,8 @@ Setup is a one-time job, about 10 minutes.
 | `Video unavailable` | [Something is wrong with that video](#video-unavailable) |
 | `Instagram sent an empty media response` | [Instagram needs login](#sites) |
 | `HTTP Error 403`, login required | [Pass your browser login](#http-error-403-or-login-required) |
+| `unable to download video data` | [Usually a missing JS runtime — install deno](#unable-to-download-video-data--check-for-a-js-runtime-first) |
+| `Sign in to confirm you're not a bot` | [Blocked as a bot — pass cookies](#sign-in-to-confirm-youre-not-a-bot) |
 | `HTTP Error 404` on `list=LM` | [Private playlists always need login](#private-playlists-wont-download) |
 | **No idea what's wrong** | [`python -m ytmusic doctor "URL"`](#run-doctor-first) |
 | Only `lnkd.in` / `bit.ly` links fail | [The short domain is blocked — use `--expand`](#short-urls-are-blocked) |
@@ -377,6 +380,25 @@ python -m ytmusic dl "PLAYLIST_URL" --playlist --playlist-folder   # one folder 
 
 Already-downloaded tracks are skipped automatically.
 
+**Mixes** (`list=RD…`, the playlists YouTube generates for you) work too, but they
+never end — YouTube keeps making up the next track for as long as you keep scrolling.
+So this run stops at the first 50 and says so:
+
+```
+A Mix never ends, so this run takes only the first 50 (use --max N for another number, --max 0 for no limit)
+```
+
+```powershell
+python -m ytmusic dl "MIX_URL" --playlist --max 100
+```
+
+The menu asks you for a number instead, so there's nothing to memorise there.
+
+A Mix is built **from your account's recommendations**. Without cookies YouTube hands
+you a version seeded from that video but blind to you; to get the one you see on
+screen, add `--cookies-from-browser` (see
+[Sign in to confirm you're not a bot](#sign-in-to-confirm-youre-not-a-bot)).
+
 ### Download video
 
 ```powershell
@@ -519,6 +541,7 @@ what it concludes:
   ✔ yt-dlp      2026.07.04
   ✔ ffmpeg      C:\ffmpeg\bin\ffmpeg.exe
   ✔ mutagen     1.48.1
+  ✖ JS runtime  找不到（YouTube 的簽章挑戰解不開，畫質會少一半或被回 403）→ 裝 deno 或 node
   ! curl_cffi   沒有安裝　→　python -m pip install "curl_cffi>=0.10,<0.16"
   ! playwright  沒有安裝
 
@@ -636,6 +659,63 @@ python -m ytmusic dl "URL" --cookies-from-browser chrome
 Works with `chrome`, `firefox`, `edge`, `brave`, `safari`. Add a profile if you need one:
 `chrome:Profile 2`.
 
+> **On Windows, Chrome/Edge almost never work.** Since Chrome 127 cookies are stored
+> with app-bound encryption, which yt-dlp cannot decrypt — it just says
+> `cookies could not be decrypted`. Use Firefox on that machine, or export a `cookies.txt`.
+
+### `unable to download video data` — check for a JS runtime first
+
+**The most common failure right now, and the easiest to fix.** It looks like this:
+
+```
+✖ Some Song — unable to download video data: HTTP Error 403: Forbidden
+```
+
+It reads like a block, but usually it isn't one: YouTube scrambles part of the playback
+URL with JavaScript, and yt-dlp has to actually *run* that JS to unscramble it. With no
+JS runtime on the machine it can't, so the URLs it hands back get a 403 — and nothing in
+the message says what's missing.
+
+Check it:
+
+```powershell
+python -m ytmusic doctor
+```
+
+If the `JS runtime` row is ✖, install one:
+
+| OS | Command |
+| --- | --- |
+| macOS | `brew install deno` |
+| Windows | `winget install DenoLand.Deno` |
+| Linux | `curl -fsSL https://deno.land/install.sh \| sh` |
+
+An existing Node.js install counts too — this tool picks it up automatically.
+
+### `Sign in to confirm you're not a bot`
+
+Easy to hit when you download hundreds of tracks in one go. The screen fills up with:
+
+```
+✖ [73/496] Dream — unable to download video data: HTTP Error 403: Forbidden
+✖ [78/496] Dear My Friend — Sign in to confirm you're not a bot. Use --cookies-from-browser…
+```
+
+This is not about the videos: **this IP / this session** got blocked as a whole. After
+three in a row the tool stops by itself (carrying on would just fail the rest and deepen
+the block) and prints what to do. In order:
+
+1. Pass signed-in cookies: `--cookies-from-browser firefox`
+2. Or export a `cookies.txt` and use `--cookies cookies.txt`
+   Sign in from a **private window**, export, then close the window — signing out kills
+   those cookies instantly
+3. Drop to one download at a time (`-j 1`) and split the list up: hammering it is what
+   got you flagged
+4. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP
+
+The order matters: check the JS runtime above first — that one you can fix on your own
+machine.
+
 ### Private playlists won't download
 
 `list=LM` ("Liked music") and other private playlists always need
@@ -680,6 +760,7 @@ python -m pip install -U yt-dlp     # sites change; this is the usual fix
 | `--subs [LANG]` | Embed a subtitle track |
 | `--single` / `--playlist` | For URLs that are both a video and a playlist |
 | `--playlist-folder` | Folder per playlist, track numbers in filenames |
+| `--max N` | Cap tracks per URL (`0` = no limit; Mixes default to 50) |
 | `--force` | Ignore history, download anyway |
 | `--dry-run` | List what would be downloaded, download nothing |
 | `--no-convert` | Keep the original audio (no ffmpeg needed) |

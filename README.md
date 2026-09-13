@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.19.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.20.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -47,6 +47,7 @@
 | 下載 Instagram / LinkedIn | `... --cookies-from-browser chrome` | [看這裡](#vimeofacebookinstagram-與其他站台) |
 | 下載微信視頻號 | `python -m ytmusic wechat "網址"` | [看這裡](#微信視頻號) |
 | 下載整張播放清單 | `python -m ytmusic dl "網址" --playlist` | [看這裡](#下載整張播放清單) |
+| 下載 YouTube 推薦的 Mix | `python -m ytmusic dl "網址" --playlist --max 50` | [看這裡](#下載整張播放清單) |
 | 每首歌收進清單資料夾 | 再加 `--playlist-folder` | [看這裡](#下載整張播放清單) |
 | 下載影片 | `python -m ytmusic dl "網址" --video 1080` | [看這裡](#下載影片) |
 | 一併抓歌詞 | 加 `--lyrics` | [看這裡](#歌詞與字幕) |
@@ -80,6 +81,8 @@
 | `Video unavailable` | [那支影片本身有問題](#video-unavailable影片無法使用) |
 | `Instagram sent an empty media response` | [Instagram 要登入](#vimeofacebookinstagram-與其他站台) |
 | `HTTP Error 403`、需要登入 | [要帶瀏覽器登入資訊](#http-error-403或需要登入) |
+| `unable to download video data` | [多半是缺 JS runtime，裝 deno 就好](#unable-to-download-video-data先確認有沒有-js-runtime) |
+| `Sign in to confirm you're not a bot` | [被當成機器人，要帶 cookies](#sign-in-to-confirm-youre-not-a-bot被-youtube-當成機器人) |
 | `HTTP Error 404`（`list=LM`） | [私人清單一定要登入](#我喜歡的音樂或私人清單下載不了) |
 | 雙擊 `.bat` 狂洗畫面 | [舊版問題，更新就好](#雙擊-下載bat-一直跳錯或狂洗畫面) |
 | `Python was not found` / Store 跳出來 | [那是 Windows 的假 python](#第一次雙擊會自動把東西裝好) |
@@ -335,6 +338,8 @@ python -m ytmusic menu
   - [找不到 ffmpeg](#找不到-ffmpeg)
   - [Video unavailable](#video-unavailable影片無法使用)
   - [HTTP Error 403 / 需要登入](#http-error-403或需要登入)
+  - **[unable to download video data](#unable-to-download-video-data先確認有沒有-js-runtime)** — 缺 JS runtime，最常見的一個
+  - [被 YouTube 當成機器人](#sign-in-to-confirm-youre-not-a-bot被-youtube-當成機器人)
   - **[先跑 doctor，讓它告訴你問題在哪](#先跑-doctor-讓它告訴你問題在哪)** — 不確定時先跑這個
   - [短網址被擋住](#短網址被擋住)　·　[SSL 連線被切斷](#ssl-連線被切斷)
   - [下載很慢或一直失敗](#下載很慢或一直失敗)
@@ -797,7 +802,25 @@ python -m ytmusic dl "播放清單網址" --playlist --playlist-folder
 >
 > 不想每次都被問的話，直接加 `--single` 或 `--playlist`。
 >
-> ⚠️ 清單代號是 `RD` 開頭的是 YouTube **自動混音**，長度幾乎無限，不建議整張下載。
+> 💿 清單代號是 `RD` 開頭的，是 YouTube 依你的口味**自動生成的混音（Mix）**——
+> 它沒有盡頭，你捲多久它就長多長。這種清單一樣可以整張下載，只是工具會自動停在
+> 前 50 首，並且在畫面上講明：
+>
+> ```
+> 自動混音清單沒有盡頭，這次只取前 50 首（要別的數量用 --max N，--max 0 表示不設限）
+> ```
+>
+> 想要別的數量就自己指定：
+>
+> ```powershell
+> python -m ytmusic dl "混音網址" --playlist --max 100
+> ```
+>
+> 用選單的話不必記這個參數——它會直接問你要幾首，按 Enter 就是預設的 50 首。
+>
+> ⚠️ 混音是**依你的帳號推薦**的。沒帶 cookies 時，YouTube 會給一份以那支影片為
+> 種子、但不認得你的版本；想要畫面上看到的那一份，得加上 `--cookies-from-browser`
+> （見下面的〈被 YouTube 當成機器人〉）。
 
 ## 下載影片
 
@@ -1033,6 +1056,58 @@ python -m ytmusic dl "網址" --cookies-from-browser chrome
 
 Chrome 讀不到的話改用 Firefox（Windows 上 Chrome 常常讀不到，這是 Google 的保護機制）。
 
+> **Windows 上的 Chrome／Edge 幾乎一定讀不到**：從 Chrome 127 版起，cookies 改用
+> 「應用程式綁定加密」存放，yt-dlp 解不開，只會說 `cookies could not be decrypted`。
+> 這台機器上請直接用 Firefox，或自己匯出一份 `cookies.txt`。
+
+## 「unable to download video data」——先確認有沒有 JS runtime
+
+**這是目前最常見、也最容易修的一個。** 訊息長這樣：
+
+```
+✖ 某某某 — unable to download video data: HTTP Error 403: Forbidden
+```
+
+看起來像被擋，實際上多半是另一回事：YouTube 會把播放網址裡的一段參數用
+JavaScript 打亂，yt-dlp 要真的跑得動那段 JS 才解得開。機器上沒有 JS runtime 時，
+它解不開，拿到的網址 YouTube 就回 403——而訊息完全不會提到缺了什麼。
+
+先跑 `doctor` 看一眼：
+
+```powershell
+python -m ytmusic doctor
+```
+
+`JS runtime` 那一列如果是 ✖，把它裝起來就好（擇一）：
+
+| 系統 | 指令 |
+| --- | --- |
+| macOS | `brew install deno` |
+| Windows | `winget install DenoLand.Deno` |
+| Linux | `curl -fsSL https://deno.land/install.sh \| sh` |
+
+已經裝了 Node.js 也算數——本工具會自動拿它來用，不必自己設定。
+
+## 「Sign in to confirm you're not a bot」——被 YouTube 當成機器人
+
+一次下載幾百首的時候特別容易踩到。畫面會變成一整片：
+
+```
+✖ [73/496] Dream / ダーリン — unable to download video data: HTTP Error 403: Forbidden
+✖ [78/496] Dear My Friend — Sign in to confirm you're not a bot. Use --cookies-from-browser…
+```
+
+這跟影片無關，是**這個 IP／這次工作階段**整個被擋下來了。連續撞到三次，工具就會
+自己停手（剩下的照跑只會一路失敗，還會讓封鎖更久），並印出該做什麼。依序試：
+
+1. 帶上已登入的 cookies：`--cookies-from-browser firefox`
+2. 或匯出 `cookies.txt` 再用 `--cookies cookies.txt`
+   用**無痕視窗**登入、匯出、然後直接關掉視窗——按了登出，那組 cookies 當場失效
+3. 同時下載數調成 1（`-j 1`），清單也拆小一點：一次打太多正是被盯上的原因
+4. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP
+
+順序有意義：先確認上面那個 JS runtime 有沒有裝好，那個是自己這台機器就能修的。
+
 ## 先跑 doctor 讓它告訴你問題在哪
 
 與其照著清單一項項猜，不如讓工具自己測：
@@ -1051,6 +1126,7 @@ python -m ytmusic doctor "貼上連不上的那個網址"
   ✔ yt-dlp      2026.07.04
   ✔ ffmpeg      C:\ffmpeg\bin\ffmpeg.exe
   ✔ mutagen     1.48.1
+  ✖ JS runtime  找不到（YouTube 的簽章挑戰解不開，畫質會少一半或被回 403）→ 裝 deno 或 node
   ! curl_cffi   沒有安裝　→　python -m pip install "curl_cffi>=0.10,<0.16"
   ! playwright  沒有安裝（只有微信瀏覽器模式需要）
 
@@ -1233,6 +1309,7 @@ pip install -e .
 | `--single` | 網址同時含清單時，只要那一首 |
 | `--playlist` | 網址同時含清單時，下載整張 |
 | `--playlist-folder` | 用清單名稱建資料夾，檔名加上曲序 |
+| `--max N` | 每個網址最多下載幾首（`0` 表示不設限；自動混音清單預設 50） |
 | `--force` | 忽略下載歷史，重新下載 |
 | `--dry-run` | 只列出會下載什麼，不真的下載 |
 | `--no-convert` | 不轉檔，保留原始音訊（不需要 ffmpeg） |

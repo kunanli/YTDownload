@@ -5,7 +5,8 @@ from ytmusic.downloader import (
     Downloader, Track, _CollectingLogger, _clean_error_text, _fallback_url,
     _final_path, _parse_rate, _rename_from_meta, _short_error, _unique_path,
     _walk, _is_network_error, _extract_over_ipv4, NETWORK_HINT,
-    CURL_CFFI_SPEC, IMPERSONATE_HINT,
+    CURL_CFFI_SPEC, IMPERSONATE_HINT, RADIO_DEFAULT_MAX, BLOCKED_ABORT_AFTER,
+    is_blocked_error,
 )
 from ytmusic.history import History
 from ytmusic.tagger import TrackMeta
@@ -567,3 +568,167 @@ class TestImpersonateOption:
         from ytmusic.config import Config
 
         assert "impersonate" not in Downloader(Config())._base_opts()
+
+
+class TestTrackCap:
+    """自動混音清單沒有盡頭，所以「整張下載」一定要有個停得下來的數字。"""
+
+    def _downloader(self, tmp_path, **kwargs):
+        return Downloader(Config(output_dir=tmp_path), **kwargs)
+
+    def test_radio_playlist_is_capped_by_default(self, tmp_path):
+        url = "https://www.youtube.com/watch?v=abc&list=RDabc"
+        assert self._downloader(tmp_path).track_cap(url) == RADIO_DEFAULT_MAX
+
+    def test_ordinary_playlist_is_not_capped(self, tmp_path):
+        url = "https://www.youtube.com/playlist?list=PL123"
+        assert self._downloader(tmp_path).track_cap(url) is None
+
+    def test_single_mode_needs_no_cap(self, tmp_path):
+        # 只要那一首的時候，清單多長都無所謂
+        url = "https://www.youtube.com/watch?v=abc&list=RDabc"
+        assert self._downloader(tmp_path).track_cap(url, single=True) is None
+
+    def test_explicit_max_wins_over_the_radio_default(self, tmp_path):
+        url = "https://www.youtube.com/watch?v=abc&list=RDabc"
+        assert self._downloader(tmp_path, max_tracks=5).track_cap(url) == 5
+
+    def test_max_zero_means_no_limit_even_for_a_mix(self, tmp_path):
+        url = "https://www.youtube.com/watch?v=abc&list=RDabc"
+        assert self._downloader(tmp_path, max_tracks=0).track_cap(url) is None
+
+    def test_max_applies_to_ordinary_playlists_too(self, tmp_path):
+        url = "https://www.youtube.com/playlist?list=PL123"
+        assert self._downloader(tmp_path, max_tracks=3).track_cap(url) == 3
+
+
+class TestExpandHonoursTheCap:
+    def _fake_ydl(self, monkeypatch, entries, captured):
+        class FakeYDL:
+            def __init__(self, opts):
+                captured.append(opts)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *exc):
+                return False
+
+            def extract_info(self, url, download=False):
+                return {"_type": "playlist", "title": "Mix", "entries": entries}
+
+        import yt_dlp
+        monkeypatch.setattr(yt_dlp, "YoutubeDL", FakeYDL)
+
+    def test_cap_is_passed_to_ytdlp_not_just_applied_afterwards(self, tmp_path, monkeypatch):
+        # 事後才截斷等於白問了幾十頁——混音清單是一頁一頁問出來的。
+        captured: list[dict] = []
+        entries = [{"id": f"v{i}", "title": str(i)} for i in range(10)]
+        self._fake_ydl(monkeypatch, entries, captured)
+
+        downloader = Downloader(Config(output_dir=tmp_path), max_tracks=3)
+        tracks = downloader.expand(["https://www.youtube.com/playlist?list=PL1"])
+
+        assert captured[0]["playlistend"] == 3
+        assert [t.video_id for t in tracks] == ["v0", "v1", "v2"]
+
+    def test_no_cap_leaves_playlistend_unset(self, tmp_path, monkeypatch):
+        captured: list[dict] = []
+        self._fake_ydl(monkeypatch, [{"id": "a", "title": "A"}], captured)
+
+        Downloader(Config(output_dir=tmp_path)).expand(
+            ["https://www.youtube.com/playlist?list=PL1"])
+
+        assert "playlistend" not in captured[0]
+
+    def test_duplicates_do_not_eat_into_the_quota(self, tmp_path, monkeypatch):
+        captured: list[dict] = []
+        entries = [{"id": "a", "title": "A"}, {"id": "a", "title": "A"},
+                   {"id": "b", "title": "B"}]
+        self._fake_ydl(monkeypatch, entries, captured)
+
+        downloader = Downloader(Config(output_dir=tmp_path), max_tracks=2)
+        tracks = downloader.expand(["https://www.youtube.com/playlist?list=PL1"])
+
+        assert [t.video_id for t in tracks] == ["a", "b"]
+
+
+class TestBlockedDetection:
+    def test_recognises_the_bot_check(self):
+        assert is_blocked_error(Exception(
+            "ERROR: [youtube] abc: Sign in to confirm you're not a bot."))
+
+    def test_recognises_the_curly_apostrophe_youtube_actually_uses(self):
+        assert is_blocked_error(Exception(
+            "Sign in to confirm you’re not a bot. Use --cookies-from-browser"))
+
+    def test_recognises_403(self):
+        assert is_blocked_error(Exception(
+            "unable to download video data: HTTP Error 403: Forbidden"))
+
+    def test_recognises_rate_limiting(self):
+        assert is_blocked_error(Exception("HTTP Error 429: Too Many Requests"))
+
+    def test_ordinary_failures_are_not_blocks(self):
+        assert not is_blocked_error(Exception("Video unavailable"))
+        assert not is_blocked_error(Exception("This video is private"))
+
+
+class TestBlockedAbort:
+    """整批被擋下來時，剩下的幾百首照跑只是把真正的原因洗掉。"""
+
+    def _downloader(self, tmp_path):
+        return Downloader(Config(output_dir=tmp_path))
+
+    def test_one_failure_does_not_stop_the_batch(self, tmp_path):
+        # 單獨一支影片本來就可能因為年齡或地區限制回 403
+        downloader = self._downloader(tmp_path)
+        downloader._note_blocked()
+        assert not downloader.blocked
+        assert not downloader._stop.is_set()
+
+    def test_stops_after_several_in_a_row(self, tmp_path):
+        downloader = self._downloader(tmp_path)
+        for _ in range(BLOCKED_ABORT_AFTER):
+            downloader._note_blocked()
+        assert downloader.blocked
+        assert downloader._stop.is_set()
+
+    def test_remaining_tracks_come_back_cancelled_not_failed(self, tmp_path):
+        downloader = self._downloader(tmp_path)
+        downloader.cancel()
+        result = downloader._download_one(Track("x", "https://y/x", "X"))
+        assert result.status == "cancelled"
+
+
+class TestJsRuntimeOptions:
+    """機器上有 node 卻不用它，等於白白讓簽章挑戰解不開。"""
+
+    def test_non_deno_runtime_is_spelled_out_for_ytdlp(self, tmp_path, monkeypatch):
+        import ytmusic.downloader as mod
+
+        monkeypatch.setattr(mod, "find_js_runtimes", lambda: {"node": "/bin/node"})
+        opts = Downloader(Config(output_dir=tmp_path))._base_opts()
+        assert opts["js_runtimes"] == {"node": {}}
+
+    def test_deno_needs_no_help_because_it_is_the_default(self, tmp_path, monkeypatch):
+        import ytmusic.downloader as mod
+
+        monkeypatch.setattr(mod, "find_js_runtimes",
+                            lambda: {"deno": "/bin/deno", "node": "/bin/node"})
+        assert "js_runtimes" not in Downloader(Config(output_dir=tmp_path))._base_opts()
+
+    def test_nothing_installed_means_no_option(self, tmp_path, monkeypatch):
+        import ytmusic.downloader as mod
+
+        monkeypatch.setattr(mod, "find_js_runtimes", dict)
+        assert "js_runtimes" not in Downloader(Config(output_dir=tmp_path))._base_opts()
+
+    def test_a_runtime_yt_dlp_does_not_know_is_left_out(self, tmp_path, monkeypatch):
+        # 送出沒聽過的名字，yt-dlp 是直接拋 ValueError——一個加分項不該弄死整趟下載
+        import ytmusic.downloader as mod
+
+        monkeypatch.setattr(mod, "find_js_runtimes",
+                            lambda: {"node": "/bin/node", "rhino": "/bin/rhino"})
+        opts = Downloader(Config(output_dir=tmp_path))._base_opts()
+        assert opts["js_runtimes"] == {"node": {}}

@@ -275,7 +275,8 @@ def _playlist_flags(url: str, ask: Callable[[str], str]) -> list[str]:
 
     kind = classify_url(url)
     if kind == "playlist":  # 純清單網址，本來就會整張下載
-        return ["--playlist-folder"] if ask_yes(ask, "ask.folder_each") else []
+        flags = ["--playlist-folder"] if ask_yes(ask, "ask.folder_each") else []
+        return flags + _mix_flags(url, ask)
     if kind != "both":
         return []
 
@@ -284,7 +285,28 @@ def _playlist_flags(url: str, ask: Callable[[str], str]) -> list[str]:
     flags = ["--playlist"]
     if ask_yes(ask, "ask.folder_named"):
         flags.append("--playlist-folder")
-    return flags
+    return flags + _mix_flags(url, ask)
+
+
+def _mix_flags(url: str, ask: Callable[[str], str]) -> list[str]:
+    """自動混音清單要問「要幾首」。
+
+    它沒有盡頭，不問的話就得由程式替使用者決定停在哪裡。直接按 Enter 就用預設值，
+    打得出數字的人也不必去記 --max 怎麼寫。
+    """
+    from .downloader import RADIO_DEFAULT_MAX
+    from .utils import is_radio_playlist
+
+    if not is_radio_playlist(url):
+        return []
+    answer = ask(f"  {t('prompt.mix_count', n=RADIO_DEFAULT_MAX)}").strip()
+    if not answer:
+        return []  # 不指定就交給預設值，不必多帶一個旗標
+    try:
+        count = int(answer)
+    except ValueError:
+        return []  # 打錯字不該讓整趟下載停下來，照預設走就好
+    return ["--max", str(max(0, count))]
 
 
 def run_menu(runner: Callable[[list[str]], int] | None = None, *,

@@ -295,3 +295,18 @@ class TestStripAnsi:
 
     def test_handles_empty(self):
         assert strip_ansi("") == "" and strip_ansi(None) == ""
+
+
+class TestFindJsRuntimes:
+    def test_prefers_deno_because_yt_dlp_enables_only_that_by_default(self, monkeypatch):
+        from ytmusic.utils import find_js_runtimes
+
+        monkeypatch.setattr("shutil.which",
+                            lambda name: f"/bin/{name}" if name in {"deno", "node"} else None)
+        assert list(find_js_runtimes()) == ["deno", "node"]
+
+    def test_nothing_installed(self, monkeypatch):
+        from ytmusic.utils import find_js_runtimes
+
+        monkeypatch.setattr("shutil.which", lambda name: None)
+        assert find_js_runtimes() == {}
