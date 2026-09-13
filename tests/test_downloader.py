@@ -732,3 +732,22 @@ class TestJsRuntimeOptions:
                             lambda: {"node": "/bin/node", "rhino": "/bin/rhino"})
         opts = Downloader(Config(output_dir=tmp_path))._base_opts()
         assert opts["js_runtimes"] == {"node": {}}
+
+
+class TestRequestSleep:
+    """YouTube 看的不只是「同時幾條」，還有「多密集」。"""
+
+    def test_sleep_reaches_ytdlp_on_both_axes(self, tmp_path):
+        opts = Downloader(Config(output_dir=tmp_path, request_sleep=5))._base_opts()
+        assert opts["sleep_interval_requests"] == 5
+        assert opts["sleep_interval"] == 5
+
+    def test_upper_bound_is_wider_so_the_gap_is_not_a_metronome(self, tmp_path):
+        # 固定間隔本身就是一種特徵，yt-dlp 會在上下界之間隨機挑
+        opts = Downloader(Config(output_dir=tmp_path, request_sleep=5))._base_opts()
+        assert opts["max_sleep_interval"] > opts["sleep_interval"]
+
+    def test_zero_means_no_sleep_options_at_all(self, tmp_path):
+        opts = Downloader(Config(output_dir=tmp_path))._base_opts()
+        assert "sleep_interval_requests" not in opts
+        assert "sleep_interval" not in opts

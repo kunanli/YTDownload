@@ -173,6 +173,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "es": "Pega la URL del canal (la primera vez, Enter para iniciar sesión): ",
         "fi": "Liitä kanavan URL (ensimmäisellä kerralla Enter kirjautumiseen): ",
     },
+    "ask.slow": {
+        "zh-Hant": "慢慢下載？（一首一首來，比較不會被 YouTube 當成機器人）",
+        "ja": "ゆっくり落としますか？（1 件ずつ。ボット判定されにくくなります）",
+        "en": "Download slowly? (one at a time — much less likely to be flagged as a bot)",
+        "ko": "천천히 받을까요? (하나씩 — 봇으로 차단될 확률이 크게 줄어듭니다)",
+        "es": "¿Descargar despacio? (de una en una; mucho menos probable que te marquen como bot)",
+        "fi": "Ladataanko hitaasti? (yksi kerrallaan – paljon pienempi riski jäädä botiksi merkityksi)",
+    },
     "prompt.mix_count": {
         "zh-Hant": "這是自動混音清單（沒有盡頭），要下載幾首？[預設 {n}，0 表示不設限] ",
         "ja": "これは自動ミックス（終わりがありません）。何件ダウンロードしますか？[既定 {n}、0 で無制限] ",
@@ -724,71 +732,59 @@ MESSAGES.update({
     },
     "blocked.hint": {
         "zh-Hant": """  YouTube 把這次的下載當成機器人了（Sign in to confirm you're not a bot／403）。
-  這不是影片的問題，也不是 yt-dlp 壞了——它要的是一組「已登入」的 cookies。依序試：
-    1. 帶上瀏覽器的 cookies：--cookies-from-browser firefox
-    2. 或自己匯出 cookies.txt，再用 --cookies cookies.txt
-       用無痕視窗登入、匯出、然後直接關掉視窗——按了登出，那組 cookies 當場失效
-    3. 同時下載數調成 1（-j 1），清單也拆小一點：一次打太多正是被盯上的原因
-    4. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP""",
+  這不是影片的問題，也不是 yt-dlp 壞了。依序試：
+    1. 慢慢下載：在指令後面加 --slow（等同併行 1、每次請求之間停幾秒）
+       一個一個下載得動、整批就不行，就是這個原因：密集才是被盯上的特徵。
+       已經下載好的會自動略過，所以直接重跑就是接著跑，不會從頭來。
+    2. 帶上已登入的 cookies：--cookies-from-browser firefox
+       或匯出 cookies.txt 再用 --cookies cookies.txt——用無痕視窗登入、匯出、
+       然後直接關掉視窗（按了登出，那組 cookies 當場失效）
+    3. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP""",
         "ja": """  YouTube に今回のダウンロードをボットと判定されました（Sign in to confirm you're not a bot／403）。
-  動画の問題でも yt-dlp の不具合でもありません——「ログイン済み」の cookies が必要です。順に試してください：
-    1. ブラウザの cookies を渡す：--cookies-from-browser firefox
-    2. または cookies.txt を書き出して --cookies cookies.txt
-       シークレットウィンドウでログイン→書き出し→そのまま閉じる（ログアウトすると即座に無効になります）
-    3. 同時ダウンロード数を 1 に（-j 1）、リストも小さく分ける：一度に叩きすぎたのが原因です
-    4. 十数分おいてから再実行、またはネットワークを変えて（スマホのテザリング）IP を変える""",
+  動画の問題でも yt-dlp の不具合でもありません。順に試してください：
+    1. ゆっくり落とす：コマンドに --slow を付ける（同時 1 件、リクエストの間に数秒待つ）
+       1 曲ずつなら落ちるのに一括だと駄目、というのはこれが原因です。密度こそが特徴です。
+       済んだ分は自動で飛ばすので、そのまま再実行すれば続きから進みます。
+    2. ログイン済みの cookies を渡す：--cookies-from-browser firefox
+       または cookies.txt を書き出して --cookies cookies.txt——シークレットウィンドウで
+       ログイン→書き出し→そのまま閉じる（ログアウトすると即座に無効になります）
+    3. 十数分おいてから再実行、またはネットワークを変えて（スマホのテザリング）IP を変える""",
         "en": """  YouTube decided this run was a bot (Sign in to confirm you're not a bot / 403).
-  Nothing is wrong with the video or with yt-dlp — it wants cookies from a signed-in session. Try in order:
-    1. Pass your browser's cookies: --cookies-from-browser firefox
-    2. Or export a cookies.txt and use --cookies cookies.txt
-       Sign in from a private window, export, then just close the window — signing out kills those cookies instantly
-    3. Drop to one download at a time (-j 1) and split the list up: hammering it is what got you flagged
-    4. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP""",
+  Nothing is wrong with the video or with yt-dlp. Try in order:
+    1. Go slow: add --slow (one at a time, with a few seconds between requests)
+       If one-by-one works but a batch doesn't, this is why — the rate is the tell.
+       Finished tracks are skipped automatically, so re-running just resumes.
+    2. Pass signed-in cookies: --cookies-from-browser firefox
+       or export a cookies.txt and use --cookies cookies.txt — sign in from a private
+       window, export, then close the window (signing out kills those cookies instantly)
+    3. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP""",
         "ko": """  YouTube가 이번 다운로드를 봇으로 판단했습니다(Sign in to confirm you're not a bot / 403).
-  영상의 문제도 yt-dlp의 고장도 아닙니다 — '로그인된' cookies가 필요합니다. 순서대로 시도하세요:
-    1. 브라우저 cookies 전달: --cookies-from-browser firefox
-    2. 또는 cookies.txt로 내보낸 뒤 --cookies cookies.txt
-       시크릿 창에서 로그인 → 내보내기 → 창을 그냥 닫기(로그아웃하면 그 cookies는 즉시 무효가 됩니다)
-    3. 동시 다운로드를 1로(-j 1), 목록도 잘게 나누기: 한꺼번에 너무 많이 요청한 것이 원인입니다
-    4. 십여 분 기다렸다가 다시 실행하거나, 네트워크를 바꿔(휴대폰 핫스팟) IP를 바꾸기""",
+  영상의 문제도 yt-dlp의 고장도 아닙니다. 순서대로 시도하세요:
+    1. 천천히 받기: 명령에 --slow 추가(동시 1개, 요청 사이에 몇 초 대기)
+       하나씩은 되는데 한꺼번에는 안 되는 이유가 이것입니다. 밀도가 바로 단서입니다.
+       받은 것은 자동으로 건너뛰므로 다시 실행하면 이어서 진행됩니다.
+    2. 로그인된 cookies 전달: --cookies-from-browser firefox
+       또는 cookies.txt로 내보낸 뒤 --cookies cookies.txt — 시크릿 창에서 로그인 →
+       내보내기 → 창을 그냥 닫기(로그아웃하면 그 cookies는 즉시 무효가 됩니다)
+    3. 십여 분 기다렸다가 다시 실행하거나, 네트워크를 바꿔(휴대폰 핫스팟) IP를 바꾸기""",
         "es": """  YouTube ha tomado esta descarga por un bot (Sign in to confirm you're not a bot / 403).
-  No es culpa del vídeo ni de yt-dlp: pide cookies de una sesión con la cuenta iniciada. Prueba en este orden:
-    1. Pásale las cookies del navegador: --cookies-from-browser firefox
-    2. O exporta un cookies.txt y usa --cookies cookies.txt
-       Inicia sesión en una ventana privada, exporta y cierra la ventana sin más: si cierras sesión, esas cookies mueren al instante
-    3. Baja a una descarga a la vez (-j 1) y parte la lista: pedir tanto de golpe es lo que te marcó
-    4. Espera diez y pico minutos, o cambia de red (datos del móvil) para dejar atrás la IP marcada""",
+  No es culpa del vídeo ni de yt-dlp. Prueba en este orden:
+    1. Ve despacio: añade --slow (una a una, con unos segundos entre peticiones)
+       Si de una en una funciona y en lote no, es por esto: el ritmo es lo que te delata.
+       Lo ya descargado se omite solo, así que volver a ejecutarlo simplemente continúa.
+    2. Pasa cookies con la sesión iniciada: --cookies-from-browser firefox
+       o exporta un cookies.txt y usa --cookies cookies.txt — inicia sesión en una ventana
+       privada, exporta y cierra la ventana (si cierras sesión, esas cookies mueren al instante)
+    3. Espera diez y pico minutos, o cambia de red (datos del móvil) para dejar atrás la IP marcada""",
         "fi": """  YouTube tulkitsi tämän ajon botiksi (Sign in to confirm you're not a bot / 403).
-  Vika ei ole videossa eikä yt-dlp:ssä – se haluaa evästeet kirjautuneesta istunnosta. Kokeile järjestyksessä:
-    1. Anna selaimen evästeet: --cookies-from-browser firefox
-    2. Tai vie cookies.txt ja käytä --cookies cookies.txt
-       Kirjaudu yksityisessä ikkunassa, vie evästeet ja sulje ikkuna – uloskirjautuminen mitätöi ne heti
-    3. Pudota yhteen lataukseen kerrallaan (-j 1) ja pilko lista: liian tiheä ryöpytys johti merkintään
-    4. Odota reilu kymmenen minuuttia tai vaihda verkkoa (puhelimen jaettu yhteys), niin IP vaihtuu""",
-    },
-    "dep.js_missing": {
-        "zh-Hant": "找不到（YouTube 的簽章挑戰解不開，畫質會少一半或被回 403）→ 裝 deno 或 node",
-        "ja": "見つかりません（YouTube の署名チャレンジを解けず、画質が減るか 403 になります）→ deno か node を入れてください",
-        "en": "not found (YouTube's signature challenge can't be solved — formats go missing or you get 403) → install deno or node",
-        "ko": "찾을 수 없음(YouTube 서명 챌린지를 풀지 못해 화질이 줄거나 403이 납니다) → deno 또는 node 설치",
-        "es": "no encontrado (no se puede resolver el reto de firma de YouTube: faltan calidades o sale 403) → instala deno o node",
-        "fi": "ei löydy (YouTuben allekirjoitushaastetta ei saada ratkaistua – laatuja puuttuu tai tulee 403) → asenna deno tai node",
-    },
-    "dep.js_usable": {
-        "zh-Hant": "{names}",
-        "ja": "{names}",
-        "en": "{names}",
-        "ko": "{names}",
-        "es": "{names}",
-        "fi": "{names}",
-    },
-    "dep.js_not_needed": {
-        "zh-Hant": "這個 yt-dlp 版本還用不到",
-        "ja": "この yt-dlp のバージョンでは不要",
-        "en": "not needed by this yt-dlp version",
-        "ko": "이 yt-dlp 버전에서는 불필요",
-        "es": "no hace falta en esta versión de yt-dlp",
-        "fi": "tämä yt-dlp-versio ei tarvitse",
+  Vika ei ole videossa eikä yt-dlp:ssä. Kokeile järjestyksessä:
+    1. Hidasta: lisää --slow (yksi kerrallaan, muutama sekunti pyyntöjen väliin)
+       Jos yksi kerrallaan toimii mutta erä ei, tässä on syy – tiheys se paljastaa.
+       Valmiit ohitetaan automaattisesti, joten uusi ajo vain jatkaa siitä mihin jäi.
+    2. Anna kirjautuneen istunnon evästeet: --cookies-from-browser firefox
+       tai vie cookies.txt ja käytä --cookies cookies.txt – kirjaudu yksityisessä
+       ikkunassa, vie ja sulje ikkuna (uloskirjautuminen mitätöi ne heti)
+    3. Odota reilu kymmenen minuuttia tai vaihda verkkoa (puhelimen jaettu yhteys), niin IP vaihtuu""",
     },
     "js.hint": {
         "zh-Hant": """  這台機器上找不到 JavaScript runtime，而 YouTube 會把播放網址的一段參數用 JS 打亂。
@@ -827,6 +823,26 @@ MESSAGES.update({
     Windows       winget install DenoLand.Deno
     Linux         curl -fsSL https://deno.land/install.sh | sh
   Jo asennettu Node.js kelpaa myös – ohjelma ottaa sen käyttöön itse.""",
+    },
+    "dep.js_missing": {
+        "zh-Hant": "找不到（YouTube 的簽章挑戰解不開，畫質會少一半或被回 403）→ 裝 deno 或 node",
+        "ja": "見つかりません（YouTube の署名チャレンジを解けず、画質が減るか 403 になります）→ deno か node を入れてください",
+        "en": "not found (YouTube's signature challenge can't be solved — formats go missing or you get 403) → install deno or node",
+        "ko": "찾을 수 없음(YouTube 서명 챌린지를 풀지 못해 화질이 줄거나 403이 납니다) → deno 또는 node 설치",
+        "es": "no encontrado (no se puede resolver el reto de firma de YouTube: faltan calidades o sale 403) → instala deno o node",
+        "fi": "ei löydy (YouTuben allekirjoitushaastetta ei saada ratkaistua – laatuja puuttuu tai tulee 403) → asenna deno tai node",
+    },
+    "dep.js_usable": {
+        "zh-Hant": "{names}", "ja": "{names}", "en": "{names}",
+        "ko": "{names}", "es": "{names}", "fi": "{names}",
+    },
+    "dep.js_not_needed": {
+        "zh-Hant": "這個 yt-dlp 版本還用不到",
+        "ja": "この yt-dlp のバージョンでは不要",
+        "en": "not needed by this yt-dlp version",
+        "ko": "이 yt-dlp 버전에서는 불필요",
+        "es": "no hace falta en esta versión de yt-dlp",
+        "fi": "tämä yt-dlp-versio ei tarvitse",
     },
     "cookies.hint": {
         "zh-Hant": """  這幾首要有帳號才看得到（403／需要登入／年齡限制／會員限定／DRM）。

@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.20.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
+**v1.21.0** ｜ [更新紀錄](CHANGELOG.md) ｜ [English](README.en.md)
 
 把 YouTube、YouTube Music、Bilibili、Vimeo、Facebook 等 1700 多個網站的影片和音樂下載到電腦裡。歌曲會自動整理好歌名、歌手和專輯封面。
 
@@ -58,6 +58,7 @@
 | 重新下載已下載過的 | 加 `--force` | [看這裡](#下載過的我還想再下載一次) |
 | 看下載過什麼 | `python -m ytmusic history list` | [看這裡](#下載歷史) |
 | 需要登入才能下載的影片 | 加 `--cookies-from-browser chrome` | [看這裡](#http-error-403或需要登入) |
+| 一首一首可以、整批被擋 | 加 `--slow` | [看這裡](#sign-in-to-confirm-youre-not-a-bot被-youtube-當成機器人) |
 | 只想先看會下載什麼 | 加 `--dry-run` | [看這裡](#第四部分完整選項進階) |
 
 ### 想改預設值（設定一次，永久生效）
@@ -1097,16 +1098,54 @@ python -m ytmusic doctor
 ✖ [78/496] Dear My Friend — Sign in to confirm you're not a bot. Use --cookies-from-browser…
 ```
 
-這跟影片無關，是**這個 IP／這次工作階段**整個被擋下來了。連續撞到三次，工具就會
-自己停手（剩下的照跑只會一路失敗，還會讓封鎖更久），並印出該做什麼。依序試：
+這跟影片無關，是**這次下載打得太密集**被判定成機器人了。連續撞到三次，工具就會
+自己停手（剩下的照跑只會一路失敗，還會讓封鎖更久），並印出該做什麼。
+
+### 先試 `--slow`
+
+**如果「一首一首下載得動、整批就不行」，那答案幾乎一定是這個。**
+
+```powershell
+python -m ytmusic dl "清單網址" --playlist --slow
+```
+
+`--slow` 等同 `-j 1 --sleep 2`：一次只下一首，而且每次向 YouTube 要東西之間停兩秒。
+你手動一個一個貼網址會成功，有一半就是因為打字、貼網址天然隔了十幾秒——密集才是
+被盯上的特徵，不是「總共下了幾首」。
+
+**已經下載好的會自動略過**，所以被擋之後直接重跑就是接著跑，不會從頭來。
+
+代價是時間。實測同一支影片，單首從解析到存檔：
+
+| 設定 | 一首要多久 | 43 首大概 |
+| --- | --- | --- |
+| 不節流 | 8 秒 | 6 分鐘 |
+| `--slow`（2 秒） | 35 秒 | 25 分鐘 |
+| `--sleep 5` | 78 秒 | 1 小時 |
+
+`--slow` 還是被擋的話就往上加：`--sleep 5`。
+
+> **用 `下載.bat` 選單的人**：整批下載時它會直接問你「慢慢下載？」，選 `y` 就是加了
+> `--slow`。也可以設成永久預設：
+>
+> ```powershell
+> python -m ytmusic config set concurrency 1
+> python -m ytmusic config set request_sleep 2
+> ```
+
+### 還是不行才動 cookies
 
 1. 帶上已登入的 cookies：`--cookies-from-browser firefox`
 2. 或匯出 `cookies.txt` 再用 `--cookies cookies.txt`
    用**無痕視窗**登入、匯出、然後直接關掉視窗——按了登出，那組 cookies 當場失效
-3. 同時下載數調成 1（`-j 1`），清單也拆小一點：一次打太多正是被盯上的原因
-4. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP
+3. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP
 
-順序有意義：先確認上面那個 JS runtime 有沒有裝好，那個是自己這台機器就能修的。
+⚠️ 帶了 cookies 之後，yt-dlp 會改用另一組「需要登入」的 client。那組對 session 的
+要求嚴格得多，cookies 只要有點不對就會回 **`The page needs to be reloaded.`**——
+看到這句就是 cookies 的問題，不是影片的問題，照上面第 2 點重匯一次。
+
+順序有意義：先確認 JS runtime 裝好了，再試 `--slow`，兩個都是自己這台機器就能處理的；
+cookies 擺最後，因為它最容易弄錯，而且弄錯的症狀又是另一種錯誤訊息。
 
 ## 先跑 doctor 讓它告訴你問題在哪
 
@@ -1310,6 +1349,8 @@ pip install -e .
 | `--playlist` | 網址同時含清單時，下載整張 |
 | `--playlist-folder` | 用清單名稱建資料夾，檔名加上曲序 |
 | `--max N` | 每個網址最多下載幾首（`0` 表示不設限；自動混音清單預設 50） |
+| `--slow` | 慢慢下載：等同 `-j 1 --sleep 2`，被當成機器人時用這個 |
+| `--sleep 秒` | 每次向站台要東西之間停幾秒 |
 | `--force` | 忽略下載歷史，重新下載 |
 | `--dry-run` | 只列出會下載什麼，不真的下載 |
 | `--no-convert` | 不轉檔，保留原始音訊（不需要 ffmpeg） |

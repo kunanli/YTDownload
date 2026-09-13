@@ -224,13 +224,13 @@ class TestPlaylistPrompts:
 
     def test_pure_playlist_offers_folder(self):
         url = "https://www.youtube.com/playlist?list=PL1"
-        assert build_command("1", Asker(url, "", "y")) == [
+        assert build_command("1", Asker(url, "", "y", "")) == [
             "dl", url, "--playlist-folder"
         ]
 
     def test_pure_playlist_folder_declined(self):
         url = "https://www.youtube.com/playlist?list=PL1"
-        assert build_command("1", Asker(url, "", "")) == ["dl", url]
+        assert build_command("1", Asker(url, "", "", "")) == ["dl", url]
 
     def test_ambiguous_url_can_choose_single(self):
         url = "https://www.youtube.com/watch?v=a&list=PL1"
@@ -238,39 +238,39 @@ class TestPlaylistPrompts:
 
     def test_ambiguous_url_can_choose_whole_playlist(self):
         url = "https://www.youtube.com/watch?v=a&list=PL1"
-        assert build_command("1", Asker(url, "", "y", "y")) == [
+        assert build_command("1", Asker(url, "", "y", "y", "")) == [
             "dl", url, "--playlist", "--playlist-folder"
         ]
 
     def test_mix_asks_how_many_to_take(self):
         # 混音清單沒有盡頭，選單得替使用者問出一個停得下來的數字
         url = "https://www.youtube.com/watch?v=a&list=RDa"
-        assert build_command("1", Asker(url, "", "y", "", "20")) == [
+        assert build_command("1", Asker(url, "", "y", "", "20", "")) == [
             "dl", url, "--playlist", "--max", "20"
         ]
 
     def test_mix_count_left_blank_falls_back_to_the_default(self):
         url = "https://www.youtube.com/watch?v=a&list=RDa"
-        assert build_command("1", Asker(url, "", "y", "", "")) == [
+        assert build_command("1", Asker(url, "", "y", "", "", "")) == [
             "dl", url, "--playlist"
         ]
 
     def test_mix_count_typo_does_not_derail_the_download(self):
         url = "https://www.youtube.com/watch?v=a&list=RDa"
-        assert build_command("1", Asker(url, "", "y", "", "二十")) == [
+        assert build_command("1", Asker(url, "", "y", "", "二十", "")) == [
             "dl", url, "--playlist"
         ]
 
     def test_ordinary_playlist_is_never_asked_for_a_count(self):
         url = "https://www.youtube.com/watch?v=a&list=PL1"
-        asker = Asker(url, "", "y", "")
+        asker = Asker(url, "", "y", "", "")
         build_command("1", asker)
         assert not any("--max" in p for p in asker.prompts)
 
     def test_batch_video_with_subtitles(self):
         # 使用者要的：整張清單下載影片，而且能選字幕語言
         url = "https://www.youtube.com/playlist?list=PL1"
-        assert build_command("4", Asker(url, "2", "y", "1,3", "y")) == [
+        assert build_command("4", Asker(url, "2", "y", "1,3", "y", "")) == [
             "dl", url, "--video", "1080", "--subs", "繁中,英", "--playlist-folder"
         ]
 
@@ -449,3 +449,27 @@ class TestChooseLanguage:
 
         set_language("ja")
         assert choose_language(Asker("99"), io.StringIO()) == "ja"
+
+
+class TestSlowPrompt:
+    """選單使用者沒有地方可以打 -j 或 --sleep，所以得替他問。"""
+
+    def test_batch_download_is_offered_slow_mode(self):
+        url = "https://www.youtube.com/playlist?list=PL1"
+        assert build_command("1", Asker(url, "", "", "y")) == ["dl", url, "--slow"]
+
+    def test_declining_leaves_the_command_alone(self):
+        url = "https://www.youtube.com/playlist?list=PL1"
+        assert build_command("1", Asker(url, "", "", "")) == ["dl", url]
+
+    def test_single_track_is_never_asked(self):
+        # 只有一首，本來就沒有「打太密集」的問題
+        asker = Asker("https://youtu.be/a", "")
+        build_command("1", asker)
+        assert not any("慢慢" in p for p in asker.prompts)
+
+    def test_choosing_one_track_out_of_a_playlist_is_never_asked(self):
+        asker = Asker("https://www.youtube.com/watch?v=a&list=PL1", "", "")
+        assert build_command("1", asker) == [
+            "dl", "https://www.youtube.com/watch?v=a&list=PL1", "--single"
+        ]

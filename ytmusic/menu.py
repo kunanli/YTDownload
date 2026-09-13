@@ -270,22 +270,31 @@ def _lang_flag(flag: str, languages: str) -> list[str]:
 
 
 def _playlist_flags(url: str, ask: Callable[[str], str]) -> list[str]:
-    """網址是播放清單時，問要不要整張下載、要不要收進獨立資料夾。"""
+    """網址是播放清單時，問要不要整張下載、要不要收進獨立資料夾、要不要放慢。"""
     from .utils import classify_url
 
     kind = classify_url(url)
     if kind == "playlist":  # 純清單網址，本來就會整張下載
         flags = ["--playlist-folder"] if ask_yes(ask, "ask.folder_each") else []
-        return flags + _mix_flags(url, ask)
+        return flags + _mix_flags(url, ask) + _slow_flag(ask)
     if kind != "both":
         return []
 
     if not ask_yes(ask, "ask.playlist_all"):
-        return ["--single"]
+        return ["--single"]  # 只有一首，沒有「打太密集」的問題
     flags = ["--playlist"]
     if ask_yes(ask, "ask.folder_named"):
         flags.append("--playlist-folder")
-    return flags + _mix_flags(url, ask)
+    return flags + _mix_flags(url, ask) + _slow_flag(ask)
+
+
+def _slow_flag(ask: Callable[[str], str]) -> list[str]:
+    """整批下載才問「要不要慢慢來」。
+
+    選單使用者沒有地方可以打 -j 或 --sleep，而「一首一首下得動、整批就被擋」
+    正是他們最常撞到的牆——不問的話，他們只能眼睜睜看著同一件事一直失敗。
+    """
+    return ["--slow"] if ask_yes(ask, "ask.slow") else []
 
 
 def _mix_flags(url: str, ask: Callable[[str], str]) -> list[str]:

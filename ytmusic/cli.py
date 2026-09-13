@@ -153,6 +153,10 @@ def _add_download_options(p) -> None:
                    help="永遠不要展開短網址，也不要詢問")
     p.add_argument("--expander-url", metavar="URL", help="自訂短網址展開服務")
     p.add_argument("--rate-limit", metavar="RATE", help="限速，例如 500K、1.5M")
+    p.add_argument("--sleep", dest="request_sleep", type=float, metavar="秒",
+                   help="每次向站台要東西之間停幾秒，用來避開「打太密集」的判定")
+    p.add_argument("--slow", action="store_true",
+                   help=f"慢慢下載：等同 -j 1 --sleep {SLOW_SLEEP:g}，被當成機器人時用這個")
     p.add_argument("--no-progress", action="store_true", help="關閉進度列，只輸出純文字")
     p.add_argument("-v", "--verbose", action="store_true",
                    help="印出 yt-dlp 的完整診斷輸出，用來查明失敗原因")
@@ -529,12 +533,32 @@ def cmd_download(args: argparse.Namespace) -> int:
     return _download_urls(args.urls, args, single=single)
 
 
+# 「慢慢下載」用的間隔。這個數字乘得很兇——解析一首要問站台七、八次，每次都等，
+# 所以實測（單首、同一支影片）是：不等 8 秒、等 2 秒 35 秒、等 5 秒 78 秒。
+# 5 秒的話 43 首要一小時，太重了；2 秒約 25 分鐘，是「慢到像人、又還等得下去」的位置。
+# 還是被擋就自己往上加：--sleep 5。
+SLOW_SLEEP = 2.0
+
+
+def _throttle(args: argparse.Namespace) -> tuple[int | None, float | None]:
+    """--slow 展開成「併行 1 ＋ 間隔」，但使用者自己寫死的值優先。"""
+    jobs = args.jobs
+    sleep = getattr(args, "request_sleep", None)
+    if getattr(args, "slow", False):
+        if jobs is None:
+            jobs = 1
+        if sleep is None:
+            sleep = SLOW_SLEEP
+    return jobs, sleep
+
+
 def _build_config(args: argparse.Namespace) -> Config:
+    jobs, sleep = _throttle(args)
     return Config.load().merged(
         output_dir=args.output,
         audio_format=args.audio_format,
         quality=args.quality,
-        concurrency=args.jobs,
+        concurrency=jobs,
         playlist_folder=args.playlist_folder,
         convert=False if args.no_convert else None,
         write_tags=False if args.no_tags else None,
@@ -547,6 +571,7 @@ def _build_config(args: argparse.Namespace) -> Config:
         proxy=args.proxy,
         impersonate=getattr(args, "impersonate", None),
         rate_limit=args.rate_limit,
+        request_sleep=sleep,
     )
 
 
