@@ -286,6 +286,28 @@ def find_ffmpeg() -> str | None:
     return shutil.which("ffmpeg") or shutil.which("ffmpeg.exe")
 
 
+# yt-dlp 認得的 JavaScript runtime，依偏好排序。deno 擺第一是因為 yt-dlp 預設
+# 只自動啟用它，其餘的要明講才會用（我們在 _base_opts 裡替使用者講）。
+JS_RUNTIMES = ("deno", "node", "bun", "quickjs")
+
+
+def find_js_runtimes() -> dict[str, str]:
+    """列出這台機器上找得到的 JS runtime：``{名稱: 執行檔路徑}``。
+
+    YouTube 會把播放網址裡的 n 參數用 JavaScript 打亂，要真的跑得動那段 JS 才
+    解得開。解不開的下場不是一句清楚的錯誤：可選畫質少掉一大半，或者解析成功、
+    下載到一半被回 403——訊息只說 unable to download video data，完全看不出
+    缺的其實是一個執行檔。
+    """
+    found: dict[str, str] = {}
+    for name in JS_RUNTIMES:
+        path = shutil.which(name) or shutil.which(f"{name}.exe")
+        if path:
+            found[name] = path
+    return found
+
+
+
 FFMPEG_HINT = """找不到 ffmpeg，音訊轉檔需要它。安裝方式：
   macOS         brew install ffmpeg
   Ubuntu/Debian sudo apt install ffmpeg

@@ -242,6 +242,31 @@ class TestPlaylistPrompts:
             "dl", url, "--playlist", "--playlist-folder"
         ]
 
+    def test_mix_asks_how_many_to_take(self):
+        # 混音清單沒有盡頭，選單得替使用者問出一個停得下來的數字
+        url = "https://www.youtube.com/watch?v=a&list=RDa"
+        assert build_command("1", Asker(url, "", "y", "", "20")) == [
+            "dl", url, "--playlist", "--max", "20"
+        ]
+
+    def test_mix_count_left_blank_falls_back_to_the_default(self):
+        url = "https://www.youtube.com/watch?v=a&list=RDa"
+        assert build_command("1", Asker(url, "", "y", "", "")) == [
+            "dl", url, "--playlist"
+        ]
+
+    def test_mix_count_typo_does_not_derail_the_download(self):
+        url = "https://www.youtube.com/watch?v=a&list=RDa"
+        assert build_command("1", Asker(url, "", "y", "", "二十")) == [
+            "dl", url, "--playlist"
+        ]
+
+    def test_ordinary_playlist_is_never_asked_for_a_count(self):
+        url = "https://www.youtube.com/watch?v=a&list=PL1"
+        asker = Asker(url, "", "y", "")
+        build_command("1", asker)
+        assert not any("--max" in p for p in asker.prompts)
+
     def test_batch_video_with_subtitles(self):
         # 使用者要的：整張清單下載影片，而且能選字幕語言
         url = "https://www.youtube.com/playlist?list=PL1"

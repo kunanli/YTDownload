@@ -18,8 +18,8 @@ from .tagger import (
 )
 from .i18n import t
 from .utils import (
-    FFMPEG_HINT, find_ffmpeg, parse_browser_spec, sanitize_filename,
-    strip_ansi, vimeo_player_url,
+    FFMPEG_HINT, find_ffmpeg, find_js_runtimes, is_radio_playlist,
+    parse_browser_spec, sanitize_filename, strip_ansi, vimeo_player_url,
 )
 
 # mp3 的 preferredquality 若小於 10 會被當成 VBR 等級，0 代表最佳。
@@ -27,6 +27,10 @@ _BEST_VBR = "0"
 
 # 各站台的搜尋前綴（yt-dlp 內建）。
 SEARCH_PREFIXES = {"youtube": "ytsearch", "bilibili": "bilisearch"}
+
+# 自動混音清單（list=RD…）沒有盡頭：YouTube 會一直生下一首，展開時每多要一頁就
+# 多一次請求。不設上限的話，「下載這張清單」會變成無限期地下載整個曲風。
+RADIO_DEFAULT_MAX = 50
 
 
 @dataclass
@@ -83,7 +87,8 @@ class Downloader:
     def __init__(self, config: Config, history: History | None = None,
                  reporter: ProgressReporter | None = None,
                  verbose: bool = False, video: str | None = None,
-                 subs: str | None = None, lyrics: str | None = None) -> None:
+                 subs: str | None = None, lyrics: str | None = None,
+                 max_tracks: int | None = None) -> None:
         self.config = config
         self.history = history
         self.reporter = reporter
@@ -94,9 +99,15 @@ class Downloader:
         self.lyrics = lyrics
         # 使用者明確指定要假扮瀏覽器時，一開始就用；沒指定則只在連線失敗後才試。
         self.impersonate = config.impersonate
+        # 每個網址最多取幾首（None 代表不設限）。混音清單沒有盡頭，一定要有個數字。
+        self.max_tracks = max_tracks
         # 短網址展開會把網址送給第三方，所以由外層取得同意後才掛上來。
         self.expander = None
         self._stop = threading.Event()
+        # 被 YouTube 當成機器人擋下來時立起來，供外層決定要印哪一種建議。
+        self.blocked = False
+        self._blocked_hits = 0
+        self._blocked_lock = threading.Lock()
 
     # -- 前置檢查 ---------------------------------------------------------
 
@@ -114,6 +125,21 @@ class Downloader:
 
     def cancel(self) -> None:
         self._stop.set()
+
+    def _note_blocked(self) -> None:
+        """記一次「被當成機器人」，連續撞到夠多次就停掉整批。
+
+        一被擋就停太急躁：單一支影片本來就可能因為年齡限制或地區限制回 403。
+        但連著幾首都這樣，就不是影片的問題了，這時候繼續跑只是在拖時間，
+        還會讓封鎖更難解開。
+        """
+        with self._blocked_lock:
+            self._blocked_hits += 1
+            if self._blocked_hits < BLOCKED_ABORT_AFTER or self.blocked:
+                return
+            self.blocked = True
+        self._stop.set()
+        self._log(t("blocked.stopping"))
 
     def _retry_network(self, opts: dict, url: str,
                        failure: Exception) -> tuple[dict | None, Exception]:
@@ -162,6 +188,18 @@ class Downloader:
 
     # -- 展開網址 ---------------------------------------------------------
 
+    def track_cap(self, url: str, single: bool = False) -> int | None:
+        """這個網址最多取幾首。回傳 None 代表整張都要。
+
+        使用者指定的 ``--max`` 一律優先。沒指定時只有自動混音清單會被設限——
+        它是無限的，「整張下載」對它而言等於「永遠不會結束」。
+        """
+        if self.max_tracks is not None:
+            return self.max_tracks or None  # --max 0 明講不設限
+        if not single and is_radio_playlist(url):
+            return RADIO_DEFAULT_MAX
+        return None
+
     def expand(self, urls: list[str], single: bool = False) -> list[Track]:
         """把播放清單／頻道網址攤平成曲目清單，並依影片 ID 去重。
 
@@ -173,21 +211,29 @@ class Downloader:
         # extract_flat="in_playlist" 只攤平清單內的影片，頻道底下的分頁清單仍會
         # 被解析，所以這裡保留 yt-dlp 的預設處理流程（process=True）。
         logger = _CollectingLogger()
-        opts = self._base_opts()
-        opts.update({
+        base = self._base_opts()
+        base.update({
             "extract_flat": "in_playlist",
             "skip_download": True,
             "noplaylist": single,
         })
         if not self.verbose:
             # 攔下 yt-dlp 的錯誤輸出，改由我們統一格式化，避免同一則訊息印兩次。
-            opts["logger"] = logger
+            base["logger"] = logger
 
         tracks: list[Track] = []
         seen: set[str] = set()
-        with YoutubeDL(opts) as ydl:
-            for url in urls:
-                info = None
+        for url in urls:
+            # 上限是逐個網址算的，而且要在展開時就交給 yt-dlp：混音清單得一頁一頁
+            # 問下去，事後才截斷等於白問了幾十次——問越多次也越容易被當成機器人。
+            opts = dict(base)
+            cap = self.track_cap(url, single=single)
+            if cap:
+                opts["playlistend"] = cap
+                if self.max_tracks is None:
+                    self._log(t("mix.capped", n=cap))
+            info = None
+            with YoutubeDL(opts) as ydl:
                 try:
                     info = ydl.extract_info(url, download=False)
                 except Exception as exc:
@@ -208,15 +254,22 @@ class Downloader:
                             self._log(t("net.hint"))
                             if not self.impersonate and not impersonation_available():
                                 self._log(IMPERSONATE_HINT)
+                        elif is_blocked_error(failure):
+                            self.blocked = True
                         continue
-                if info is None:
-                    self._log(t("err.unreadable_bare", url=url))
+            if info is None:
+                self._log(t("err.unreadable_bare", url=url))
+                continue
+            fresh = 0
+            for track in _walk(info):
+                if track.video_id in seen:
                     continue
-                for track in _walk(info):
-                    if track.video_id in seen:
-                        continue
-                    seen.add(track.video_id)
-                    tracks.append(track)
+                seen.add(track.video_id)
+                tracks.append(track)
+                fresh += 1
+                # 同一張清單裡的重複影片不該佔掉額度，所以在去重之後才數。
+                if cap and fresh >= cap:
+                    break
         return tracks
 
     def search(self, query: str, limit: int = 8,
@@ -278,7 +331,7 @@ class Downloader:
         from yt_dlp.utils import DownloadError
 
         if self._stop.is_set():
-            return Result(track, "error", message="已取消")
+            return Result(track, "cancelled", message=t("dl.cancelled"))
 
         logger = _CollectingLogger()
         opts = self._download_opts(track, logger)
@@ -303,11 +356,15 @@ class Downloader:
                 raise DownloadError("下載結束但找不到輸出檔案")
         except KeyboardInterrupt:
             self._stop.set()
+            cancelled = t("dl.cancelled")
             if self.reporter:
-                self.reporter.finish(track.video_id, "error", f"{track.label} — 已取消")
-            return Result(track, "error", message="已取消")
+                self.reporter.finish(track.video_id, "error",
+                                     f"{track.label} — {cancelled}")
+            return Result(track, "cancelled", message=cancelled)
         except Exception as exc:
             message = _short_error(exc, logger)
+            if is_blocked_error(exc):
+                self._note_blocked()
             if self.reporter:
                 self.reporter.finish(track.video_id, "error", f"{track.label} — {message}")
             return Result(track, "error", message=message)
@@ -449,6 +506,11 @@ class Downloader:
             limit = _parse_rate(self.config.rate_limit)
             if limit:
                 opts["ratelimit"] = limit
+        runtimes = _usable_js_runtimes()
+        if runtimes and "deno" not in runtimes:
+            # yt-dlp 預設只自動啟用 deno。機器上明明有 node／bun 卻不用它，
+            # 等於白白讓 YouTube 的簽章挑戰解不開——替使用者把話講出來。
+            opts["js_runtimes"] = {name: {} for name in runtimes}
         return opts
 
     def _download_opts(self, track: Track, logger: _CollectingLogger) -> dict:
@@ -758,6 +820,42 @@ def _is_network_error(exc: BaseException) -> bool:
 
     message = strip_ansi(str(exc)).lower()
     return any(marker in message for marker in _NETWORK_MARKERS)
+
+
+# YouTube 判定「你是機器人」時的特徵。彎引號那條不能省——YouTube 訊息裡用的是
+# U+2019，照著錯誤訊息複製過來的直引號版本比對不到。
+_BLOCKED_MARKERS = (
+    "confirm you're not a bot", "confirm you\u2019re not a bot",
+    "sign in to confirm", "http error 403", "403: forbidden",
+    "http error 429", "too many requests",
+)
+
+# 連續撞到幾次就停手。這類失敗跟影片無關，是這個 IP／這次工作階段整個被擋下來
+# 了：剩下的幾百首照跑只會一首一首地失敗，而且每多打一次就讓封鎖更久。
+BLOCKED_ABORT_AFTER = 3
+
+
+def _usable_js_runtimes() -> dict[str, str]:
+    """找得到、而且這個 yt-dlp 版本認得的 JS runtime。
+
+    名字沒過濾的話代價很重：yt-dlp 對不認識的 runtime 是直接拋 ValueError，
+    等於因為一個「加分項」把每一次下載都弄死。哪天它拿掉其中一個名字，
+    這裡就只是少用一個 runtime。
+    """
+    found = find_js_runtimes()
+    try:
+        from yt_dlp.globals import supported_js_runtimes
+
+        known = set(supported_js_runtimes.value)
+    except Exception:  # 舊版 yt-dlp 沒有這個機制，那就別多嘴
+        return {}
+    return {name: path for name, path in found.items() if name in known}
+
+
+def is_blocked_error(exc: BaseException) -> bool:
+    """判斷失敗是不是「被 YouTube 擋下來」，而不是這支影片本身有問題。"""
+    message = strip_ansi(str(exc)).lower()
+    return any(marker in message for marker in _BLOCKED_MARKERS)
 
 
 # curl_cffi 的版本區間是 yt-dlp 寫死的：不在區間內時 yt-dlp 只會說「target

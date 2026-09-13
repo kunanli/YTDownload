@@ -173,6 +173,14 @@ MESSAGES: dict[str, dict[str, str]] = {
         "es": "Pega la URL del canal (la primera vez, Enter para iniciar sesión): ",
         "fi": "Liitä kanavan URL (ensimmäisellä kerralla Enter kirjautumiseen): ",
     },
+    "prompt.mix_count": {
+        "zh-Hant": "這是自動混音清單（沒有盡頭），要下載幾首？[預設 {n}，0 表示不設限] ",
+        "ja": "これは自動ミックス（終わりがありません）。何件ダウンロードしますか？[既定 {n}、0 で無制限] ",
+        "en": "This is a Mix (it never ends). How many to download? [default {n}, 0 = no limit] ",
+        "ko": "이것은 자동 믹스입니다(끝이 없습니다). 몇 개를 받을까요? [기본 {n}, 0은 무제한] ",
+        "es": "Esto es una mezcla automática (no se acaba). ¿Cuántas descargar? [por defecto {n}, 0 = sin límite] ",
+        "fi": "Tämä on automaattinen miksi (ei lopu koskaan). Montako ladataan? [oletus {n}, 0 = ei rajaa] ",
+    },
     "prompt.playlist_url": {
         "zh-Hant": "貼上播放清單網址：",
         "ja": "プレイリストの URL を貼り付け：",
@@ -685,6 +693,174 @@ MESSAGES.update({
     "dl.cancelled": {
         "zh-Hant": "已取消。", "ja": "キャンセルしました。", "en": "Cancelled.",
         "ko": "취소했습니다.", "es": "Cancelado.", "fi": "Peruttu.",
+    },
+    "track.cancelled": {
+        "zh-Hant": "已取消", "ja": "キャンセル", "en": "Cancelled",
+        "ko": "취소됨", "es": "Cancelado", "fi": "Peruttu",
+    },
+    "dl.cancelled_count": {
+        "zh-Hant": "，{n} 首沒有下載",
+        "ja": "、{n} 件 未ダウンロード",
+        "en": ", {n} not downloaded",
+        "ko": ", {n}개 미다운로드",
+        "es": ", {n} sin descargar",
+        "fi": ", {n} lataamatta",
+    },
+    "mix.capped": {
+        "zh-Hant": "  自動混音清單沒有盡頭，這次只取前 {n} 首（要別的數量用 --max N，--max 0 表示不設限）",
+        "ja": "  自動ミックスには終わりがないので、今回は先頭 {n} 件だけにします（数を変えるなら --max N、無制限は --max 0）",
+        "en": "  A Mix never ends, so this run takes only the first {n} (use --max N for another number, --max 0 for no limit)",
+        "ko": "  자동 믹스는 끝이 없으므로 이번에는 앞의 {n}개만 받습니다(다른 개수는 --max N, 무제한은 --max 0)",
+        "es": "  Una mezcla automática no se acaba nunca, así que solo se toman los primeros {n} (usa --max N para otra cantidad, --max 0 para no limitar)",
+        "fi": "  Automaattinen miksi ei lopu koskaan, joten tällä kertaa otetaan vain {n} ensimmäistä (toinen määrä: --max N, ei rajaa: --max 0)",
+    },
+    "blocked.stopping": {
+        "zh-Hant": "  連續好幾首都被 YouTube 擋下來，先停在這裡——照這樣跑下去，剩下的只會一路失敗。",
+        "ja": "  立て続けに YouTube にブロックされたので、ここで止めます——このまま続けても残りは失敗するだけです。",
+        "en": "  Several in a row were blocked by YouTube, so stopping here — carrying on would just fail the rest.",
+        "ko": "  연달아 YouTube에 차단되어 여기서 멈춥니다 — 계속해도 나머지는 실패하기만 합니다.",
+        "es": "  Varias seguidas fueron bloqueadas por YouTube, así que paramos aquí: seguir solo haría fallar el resto.",
+        "fi": "  Useampi peräkkäin tyssäsi YouTuben estoon, joten pysähdytään tähän – jatkaminen vain kaataisi loput.",
+    },
+    "blocked.hint": {
+        "zh-Hant": """  YouTube 把這次的下載當成機器人了（Sign in to confirm you're not a bot／403）。
+  這不是影片的問題，也不是 yt-dlp 壞了——它要的是一組「已登入」的 cookies。依序試：
+    1. 帶上瀏覽器的 cookies：--cookies-from-browser firefox
+    2. 或自己匯出 cookies.txt，再用 --cookies cookies.txt
+       用無痕視窗登入、匯出、然後直接關掉視窗——按了登出，那組 cookies 當場失效
+    3. 同時下載數調成 1（-j 1），清單也拆小一點：一次打太多正是被盯上的原因
+    4. 等十幾分鐘再跑，或換個網路（手機熱點）換掉被盯上的 IP""",
+        "ja": """  YouTube に今回のダウンロードをボットと判定されました（Sign in to confirm you're not a bot／403）。
+  動画の問題でも yt-dlp の不具合でもありません——「ログイン済み」の cookies が必要です。順に試してください：
+    1. ブラウザの cookies を渡す：--cookies-from-browser firefox
+    2. または cookies.txt を書き出して --cookies cookies.txt
+       シークレットウィンドウでログイン→書き出し→そのまま閉じる（ログアウトすると即座に無効になります）
+    3. 同時ダウンロード数を 1 に（-j 1）、リストも小さく分ける：一度に叩きすぎたのが原因です
+    4. 十数分おいてから再実行、またはネットワークを変えて（スマホのテザリング）IP を変える""",
+        "en": """  YouTube decided this run was a bot (Sign in to confirm you're not a bot / 403).
+  Nothing is wrong with the video or with yt-dlp — it wants cookies from a signed-in session. Try in order:
+    1. Pass your browser's cookies: --cookies-from-browser firefox
+    2. Or export a cookies.txt and use --cookies cookies.txt
+       Sign in from a private window, export, then just close the window — signing out kills those cookies instantly
+    3. Drop to one download at a time (-j 1) and split the list up: hammering it is what got you flagged
+    4. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP""",
+        "ko": """  YouTube가 이번 다운로드를 봇으로 판단했습니다(Sign in to confirm you're not a bot / 403).
+  영상의 문제도 yt-dlp의 고장도 아닙니다 — '로그인된' cookies가 필요합니다. 순서대로 시도하세요:
+    1. 브라우저 cookies 전달: --cookies-from-browser firefox
+    2. 또는 cookies.txt로 내보낸 뒤 --cookies cookies.txt
+       시크릿 창에서 로그인 → 내보내기 → 창을 그냥 닫기(로그아웃하면 그 cookies는 즉시 무효가 됩니다)
+    3. 동시 다운로드를 1로(-j 1), 목록도 잘게 나누기: 한꺼번에 너무 많이 요청한 것이 원인입니다
+    4. 십여 분 기다렸다가 다시 실행하거나, 네트워크를 바꿔(휴대폰 핫스팟) IP를 바꾸기""",
+        "es": """  YouTube ha tomado esta descarga por un bot (Sign in to confirm you're not a bot / 403).
+  No es culpa del vídeo ni de yt-dlp: pide cookies de una sesión con la cuenta iniciada. Prueba en este orden:
+    1. Pásale las cookies del navegador: --cookies-from-browser firefox
+    2. O exporta un cookies.txt y usa --cookies cookies.txt
+       Inicia sesión en una ventana privada, exporta y cierra la ventana sin más: si cierras sesión, esas cookies mueren al instante
+    3. Baja a una descarga a la vez (-j 1) y parte la lista: pedir tanto de golpe es lo que te marcó
+    4. Espera diez y pico minutos, o cambia de red (datos del móvil) para dejar atrás la IP marcada""",
+        "fi": """  YouTube tulkitsi tämän ajon botiksi (Sign in to confirm you're not a bot / 403).
+  Vika ei ole videossa eikä yt-dlp:ssä – se haluaa evästeet kirjautuneesta istunnosta. Kokeile järjestyksessä:
+    1. Anna selaimen evästeet: --cookies-from-browser firefox
+    2. Tai vie cookies.txt ja käytä --cookies cookies.txt
+       Kirjaudu yksityisessä ikkunassa, vie evästeet ja sulje ikkuna – uloskirjautuminen mitätöi ne heti
+    3. Pudota yhteen lataukseen kerrallaan (-j 1) ja pilko lista: liian tiheä ryöpytys johti merkintään
+    4. Odota reilu kymmenen minuuttia tai vaihda verkkoa (puhelimen jaettu yhteys), niin IP vaihtuu""",
+    },
+    "dep.js_missing": {
+        "zh-Hant": "找不到（YouTube 的簽章挑戰解不開，畫質會少一半或被回 403）→ 裝 deno 或 node",
+        "ja": "見つかりません（YouTube の署名チャレンジを解けず、画質が減るか 403 になります）→ deno か node を入れてください",
+        "en": "not found (YouTube's signature challenge can't be solved — formats go missing or you get 403) → install deno or node",
+        "ko": "찾을 수 없음(YouTube 서명 챌린지를 풀지 못해 화질이 줄거나 403이 납니다) → deno 또는 node 설치",
+        "es": "no encontrado (no se puede resolver el reto de firma de YouTube: faltan calidades o sale 403) → instala deno o node",
+        "fi": "ei löydy (YouTuben allekirjoitushaastetta ei saada ratkaistua – laatuja puuttuu tai tulee 403) → asenna deno tai node",
+    },
+    "dep.js_usable": {
+        "zh-Hant": "{names}",
+        "ja": "{names}",
+        "en": "{names}",
+        "ko": "{names}",
+        "es": "{names}",
+        "fi": "{names}",
+    },
+    "dep.js_not_needed": {
+        "zh-Hant": "這個 yt-dlp 版本還用不到",
+        "ja": "この yt-dlp のバージョンでは不要",
+        "en": "not needed by this yt-dlp version",
+        "ko": "이 yt-dlp 버전에서는 불필요",
+        "es": "no hace falta en esta versión de yt-dlp",
+        "fi": "tämä yt-dlp-versio ei tarvitse",
+    },
+    "js.hint": {
+        "zh-Hant": """  這台機器上找不到 JavaScript runtime，而 YouTube 會把播放網址的一段參數用 JS 打亂。
+  解不開的下場就是：可選畫質少一大半，或者解析成功、下載到一半被回 403。先把它裝起來：
+    macOS         brew install deno
+    Windows       winget install DenoLand.Deno
+    Linux         curl -fsSL https://deno.land/install.sh | sh
+  已經裝了 Node.js 也算數——本程式會自動拿它來用。""",
+        "ja": """  この環境に JavaScript runtime がありません。YouTube は再生 URL の一部を JS で難読化します。
+  解けないと、選べる画質が大幅に減るか、解析は通っても途中で 403 になります。まず入れてください：
+    macOS         brew install deno
+    Windows       winget install DenoLand.Deno
+    Linux         curl -fsSL https://deno.land/install.sh | sh
+  Node.js が入っていればそれでも構いません——自動で使います。""",
+        "en": """  No JavaScript runtime on this machine, and YouTube scrambles part of the playback URL with JS.
+  Without one you lose most of the format choices, or extraction succeeds and the download 403s halfway. Install one:
+    macOS         brew install deno
+    Windows       winget install DenoLand.Deno
+    Linux         curl -fsSL https://deno.land/install.sh | sh
+  An existing Node.js install counts too — this tool picks it up automatically.""",
+        "ko": """  이 컴퓨터에 JavaScript runtime이 없습니다. YouTube는 재생 URL의 일부를 JS로 난독화합니다.
+  풀지 못하면 선택 가능한 화질이 크게 줄거나, 분석은 되어도 다운로드 도중 403이 납니다. 먼저 설치하세요:
+    macOS         brew install deno
+    Windows       winget install DenoLand.Deno
+    Linux         curl -fsSL https://deno.land/install.sh | sh
+  이미 Node.js가 있다면 그것도 됩니다 — 자동으로 사용합니다.""",
+        "es": """  No hay ningún runtime de JavaScript en este equipo, y YouTube ofusca parte de la URL de reproducción con JS.
+  Sin él pierdes casi todas las calidades, o la descarga da 403 a mitad. Instala uno:
+    macOS         brew install deno
+    Windows       winget install DenoLand.Deno
+    Linux         curl -fsSL https://deno.land/install.sh | sh
+  Si ya tienes Node.js, también vale: el programa lo usa automáticamente.""",
+        "fi": """  Tällä koneella ei ole JavaScript-ajoympäristöä, ja YouTube sotkee osan toisto-URL:sta JS:llä.
+  Ilman sitä laatuvaihtoehdoista katoaa suurin osa, tai lataus kaatuu 403:een kesken. Asenna jokin:
+    macOS         brew install deno
+    Windows       winget install DenoLand.Deno
+    Linux         curl -fsSL https://deno.land/install.sh | sh
+  Jo asennettu Node.js kelpaa myös – ohjelma ottaa sen käyttöön itse.""",
+    },
+    "cookies.hint": {
+        "zh-Hant": """  這幾首要有帳號才看得到（403／需要登入／年齡限制／會員限定／DRM）。
+  帶上 cookies 再跑一次：--cookies-from-browser firefox（或 chrome、edge），
+  或匯出 cookies.txt 之後用 --cookies cookies.txt。""",
+        "ja": """  これらはアカウントがないと見られません（403／要ログイン／年齢制限／メンバー限定／DRM）。
+  cookies を渡して再実行してください：--cookies-from-browser firefox（chrome、edge も可）、
+  または cookies.txt を書き出して --cookies cookies.txt。""",
+        "en": """  These need an account to view (403 / sign-in / age-restricted / members-only / DRM).
+  Run again with cookies: --cookies-from-browser firefox (or chrome, edge),
+  or export a cookies.txt and use --cookies cookies.txt.""",
+        "ko": """  이 항목들은 계정이 있어야 볼 수 있습니다(403 / 로그인 필요 / 연령 제한 / 멤버 전용 / DRM).
+  cookies를 붙여 다시 실행하세요: --cookies-from-browser firefox(또는 chrome, edge),
+  아니면 cookies.txt로 내보낸 뒤 --cookies cookies.txt.""",
+        "es": """  Estos requieren una cuenta para verse (403 / inicio de sesión / edad / solo miembros / DRM).
+  Vuelve a ejecutarlo con cookies: --cookies-from-browser firefox (o chrome, edge),
+  o exporta un cookies.txt y usa --cookies cookies.txt.""",
+        "fi": """  Nämä vaativat tilin (403 / kirjautuminen / ikäraja / vain jäsenille / DRM).
+  Aja uudelleen evästeiden kanssa: --cookies-from-browser firefox (tai chrome, edge),
+  tai vie cookies.txt ja käytä --cookies cookies.txt.""",
+    },
+    "blocked.chrome_windows": {
+        "zh-Hant": """  註：Windows 上的 Chrome／Edge 從 127 版起改用「應用程式綁定加密」，yt-dlp 解不開
+      （訊息會是 cookies could not be decrypted）。這台機器請改用 Firefox，或匯出 cookies.txt。""",
+        "ja": """  注：Windows の Chrome／Edge は 127 以降「アプリバインド暗号化」になり、yt-dlp では復号できません
+      （cookies could not be decrypted と出ます）。この環境では Firefox か cookies.txt を使ってください。""",
+        "en": """  Note: on Windows, Chrome/Edge 127+ use app-bound encryption and yt-dlp cannot decrypt those cookies
+      (it says "cookies could not be decrypted"). On this machine use Firefox, or export a cookies.txt.""",
+        "ko": """  참고: Windows의 Chrome/Edge는 127 버전부터 앱 바인딩 암호화를 사용해 yt-dlp가 복호화하지 못합니다
+      (cookies could not be decrypted 라고 나옵니다). 이 PC에서는 Firefox나 cookies.txt를 쓰세요.""",
+        "es": """  Nota: en Windows, Chrome/Edge 127+ usan cifrado ligado a la app y yt-dlp no puede descifrar esas cookies
+      (dice "cookies could not be decrypted"). En este equipo usa Firefox o exporta un cookies.txt.""",
+        "fi": """  Huom: Windowsissa Chrome/Edge 127+ käyttää sovellussidottua salausta, eikä yt-dlp saa niitä evästeitä auki
+      ("cookies could not be decrypted"). Käytä tällä koneella Firefoxia tai vie cookies.txt.""",
     },
     "err.unreadable": {
         "zh-Hant": "✖ 無法讀取 {url}：{error}",
