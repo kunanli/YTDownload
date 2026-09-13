@@ -54,6 +54,9 @@ class Config:
     cookies_from_browser: str | None = None
     proxy: str | None = None
     rate_limit: str | None = None
+    # 每次向站台要東西之間停幾秒。YouTube 認的不只是「同時幾條」，還有「多密集」：
+    # 一首接一首、中間毫無間隔，正是被判定成機器人的樣子。0 代表不等。
+    request_sleep: float = 0.0
     # 假扮瀏覽器的 TLS 指紋（需要 curl_cffi），例如 chrome、firefox。
     impersonate: str | None = None
 
@@ -175,6 +178,11 @@ def coerce_value(field_name: str, raw: str):
         raise ValueError(f"{field_name} 需要布林值（true/false），收到 {raw!r}")
     if field_name == "concurrency":
         return int(raw)
+    if field_name == "request_sleep":
+        value = float(raw)
+        if value < 0:
+            raise ValueError(f"request_sleep 不能是負數，收到 {raw!r}")
+        return value
     if lowered in {"none", "null", ""} and field_name in {
         "cookies_file", "cookies_from_browser", "proxy", "rate_limit",
         "impersonate",

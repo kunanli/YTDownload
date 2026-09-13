@@ -148,3 +148,34 @@ class TestExplanationsAreTranslated:
         for key in ("net.hint", "wx.blocked_hint", "conclusion.short_blocked"):
             for code in LANGUAGE_CODES:
                 assert len(MESSAGES[key][code]) > 40, f"{key}/{code}"
+
+
+class TestEveryKeyTheCodeAsksForExists:
+    """漏掉一句翻譯，畫面上會冒出另一種語言；整個鍵不見，冒出來的是代號本身。
+
+    後者更難發現——`t()` 找不到鍵時回傳鍵名，所以畫面上只會多一行 `cookies.hint`，
+    不會拋例外，也不會有測試變紅。這裡把程式碼真正用到的鍵全部釘住。
+    （真的發生過：一次大段替換把相鄰的兩塊訊息一起吃掉了。）
+    """
+
+    def _keys_used(self):
+        import pathlib
+        import re
+
+        pattern = re.compile(r"""\bt\(\s*["']([a-z0-9_]+(?:\.[a-z0-9_]+)+)["']""", re.I)
+        root = pathlib.Path(__file__).resolve().parent.parent / "ytmusic"
+        found = {}
+        for path in sorted(root.glob("*.py")):
+            for key in pattern.findall(path.read_text(encoding="utf-8")):
+                found.setdefault(key, path.name)
+        return found
+
+    def test_found_enough_keys_to_be_meaningful(self):
+        # 正規表示式失手時這個類別會變成永遠通過，那比沒有測試更糟
+        assert len(self._keys_used()) > 50
+
+    def test_no_key_is_missing_from_the_catalogue(self):
+        missing = {f"{key} ({where})"
+                   for key, where in self._keys_used().items()
+                   if key not in MESSAGES}
+        assert missing == set()

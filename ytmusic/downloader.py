@@ -506,6 +506,14 @@ class Downloader:
             limit = _parse_rate(self.config.rate_limit)
             if limit:
                 opts["ratelimit"] = limit
+        if self.config.request_sleep > 0:
+            # YouTube 看的不只是「同時幾條」，還有「多密集」。一首接一首、中間毫無
+            # 間隔，正是機器人的樣子——使用者手動一個一個貼網址會成功，有一半是因為
+            # 打字天然就隔了十幾秒。上下界不同是刻意的：固定間隔本身也是一種特徵。
+            gap = self.config.request_sleep
+            opts["sleep_interval_requests"] = gap
+            opts["sleep_interval"] = gap
+            opts["max_sleep_interval"] = gap * 2
         runtimes = _usable_js_runtimes()
         if runtimes and "deno" not in runtimes:
             # yt-dlp 預設只自動啟用 deno。機器上明明有 node／bun 卻不用它，

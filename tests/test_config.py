@@ -119,3 +119,31 @@ class TestExpandShortUrls:
         path = tmp_path / "config.json"
         Config().merged(expand_short_urls=True).save(path)
         assert Config.load(path).expand_short_urls is True
+
+
+class TestRequestSleepSetting:
+    def test_accepts_a_number(self):
+        from ytmusic.config import coerce_value
+
+        assert coerce_value("request_sleep", "5") == 5.0
+
+    def test_accepts_a_fraction(self):
+        from ytmusic.config import coerce_value
+
+        assert coerce_value("request_sleep", "2.5") == 2.5
+
+    def test_rejects_negative(self):
+        import pytest
+
+        from ytmusic.config import coerce_value
+
+        with pytest.raises(ValueError):
+            coerce_value("request_sleep", "-1")
+
+    def test_survives_a_save_and_reload(self, tmp_path, monkeypatch):
+        # 選單使用者沒有地方打 --slow，設定檔是他們唯一的開關
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        from ytmusic.config import Config
+
+        Config.load().merged(request_sleep=4.0).save()
+        assert Config.load().request_sleep == 4.0

@@ -205,7 +205,7 @@ class TestSummaryHints:
                         tmp_path)
         err = capsys.readouterr().err
         assert "--cookies-from-browser firefox" in err
-        assert "-j 1" in err  # 少開幾條同時下載才是根治的那一半
+        assert "--slow" in err  # 放慢才是「一個一個可以、整批不行」的解
 
     def test_members_only_gets_the_plain_cookie_advice(self, tmp_path, capsys):
         self._summarize([self._result("Join this channel: members-only content")],
@@ -257,3 +257,34 @@ class TestJsRuntimeAdvice:
                             lambda: {"deno": "/bin/deno"})
         self._summarize(tmp_path)
         assert "deno" not in capsys.readouterr().err
+
+
+class TestSlowFlag:
+    """「一個一個下得動、整批就被擋」的那一招，要好記到不必查。"""
+
+    def _config(self, argv):
+        from ytmusic.cli import _build_config
+
+        return _build_config(build_parser().parse_args(argv))
+
+    def test_slow_means_one_at_a_time_with_a_gap(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        config = self._config(["dl", "URL", "--slow"])
+        assert config.concurrency == 1
+        assert config.request_sleep > 0
+
+    def test_explicit_values_win_over_slow(self, tmp_path, monkeypatch):
+        # --slow 是預設組合，不是霸王條款
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        config = self._config(["dl", "URL", "--slow", "-j", "2", "--sleep", "9"])
+        assert (config.concurrency, config.request_sleep) == (2, 9)
+
+    def test_sleep_alone_leaves_concurrency_alone(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        config = self._config(["dl", "URL", "--sleep", "3"])
+        assert config.request_sleep == 3
+        assert config.concurrency == 3  # 預設值，沒被動到
+
+    def test_no_throttle_by_default(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
+        assert self._config(["dl", "URL"]).request_sleep == 0

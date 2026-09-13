@@ -1,6 +1,6 @@
 # YTDownload
 
-**v1.20.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
+**v1.21.0** ｜ [Changelog](CHANGELOG.md) ｜ [繁體中文](README.md)
 
 Download video and music from YouTube, YouTube Music, Bilibili, Vimeo, Facebook and
 1700+ other sites. Songs come out with the title, artist and cover art already filled in.
@@ -701,20 +701,58 @@ Easy to hit when you download hundreds of tracks in one go. The screen fills up 
 ✖ [78/496] Dear My Friend — Sign in to confirm you're not a bot. Use --cookies-from-browser…
 ```
 
-This is not about the videos: **this IP / this session** got blocked as a whole. After
+This is not about the videos: **the run was too dense** and got read as a bot. After
 three in a row the tool stops by itself (carrying on would just fail the rest and deepen
-the block) and prints what to do. In order:
+the block) and prints what to do.
+
+#### Try `--slow` first
+
+**If one-by-one works but a batch doesn't, this is almost certainly the answer.**
+
+```powershell
+python -m ytmusic dl "PLAYLIST_URL" --playlist --slow
+```
+
+`--slow` is `-j 1 --sleep 2`: one track at a time, two seconds between requests. Pasting
+URLs by hand works partly because typing puts a natural ten-odd seconds between them —
+the *rate* is the tell, not the total.
+
+**Finished tracks are skipped automatically**, so re-running after a block just resumes.
+
+The cost is time. Measured on one video, resolve to file on disk:
+
+| Setting | Per track | ~43 tracks |
+| --- | --- | --- |
+| no throttle | 8 s | 6 min |
+| `--slow` (2 s) | 35 s | 25 min |
+| `--sleep 5` | 78 s | 1 hour |
+
+Still blocked with `--slow`? Push it up: `--sleep 5`.
+
+> **Menu users**: batch downloads now ask "Download slowly?" — answering `y` adds
+> `--slow`. Or make it permanent:
+>
+> ```powershell
+> python -m ytmusic config set concurrency 1
+> python -m ytmusic config set request_sleep 2
+> ```
+
+#### Only then reach for cookies
 
 1. Pass signed-in cookies: `--cookies-from-browser firefox`
 2. Or export a `cookies.txt` and use `--cookies cookies.txt`
    Sign in from a **private window**, export, then close the window — signing out kills
    those cookies instantly
-3. Drop to one download at a time (`-j 1`) and split the list up: hammering it is what
-   got you flagged
-4. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP
+3. Wait ten-odd minutes, or switch networks (phone hotspot) to get off the flagged IP
 
-The order matters: check the JS runtime above first — that one you can fix on your own
-machine.
+⚠️ With cookies, yt-dlp switches to a different, signed-in set of players. Those are much
+pickier about the session, and slightly-off cookies come back as
+**`The page needs to be reloaded.`** — that message means the cookies, not the video.
+Re-export them per step 2.
+
+The order matters: check the JS runtime, then `--slow` — both are fixable on your own
+machine. Cookies come last because they are the easiest to get wrong, and getting them
+wrong produces a different error entirely.
 
 ### Private playlists won't download
 
@@ -761,6 +799,8 @@ python -m pip install -U yt-dlp     # sites change; this is the usual fix
 | `--single` / `--playlist` | For URLs that are both a video and a playlist |
 | `--playlist-folder` | Folder per playlist, track numbers in filenames |
 | `--max N` | Cap tracks per URL (`0` = no limit; Mixes default to 50) |
+| `--slow` | Go slow: same as `-j 1 --sleep 2`, for when you get flagged as a bot |
+| `--sleep SEC` | Seconds to wait between requests to the site |
 | `--force` | Ignore history, download anyway |
 | `--dry-run` | List what would be downloaded, download nothing |
 | `--no-convert` | Keep the original audio (no ffmpeg needed) |
